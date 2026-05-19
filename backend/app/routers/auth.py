@@ -73,45 +73,51 @@ def google_oauth_redirect():
     return RedirectResponse(url=GOOGLE_AUTH_URL + params)
 
 
-@router.get("/google/callback", response_model=TokenPair)
+@router.get("/google/callback")
 async def google_callback(code: str, db: Session = Depends(get_db)):
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(GOOGLE_TOKEN_URL, data={
-            "code": code,
-            "client_id": settings.GOOGLE_CLIENT_ID,
-            "client_secret": settings.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-            "grant_type": "authorization_code",
-        })
-        token_resp.raise_for_status()
-        google_token = token_resp.json()["access_token"]
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(GOOGLE_TOKEN_URL, data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            })
+            token_resp.raise_for_status()
+            google_token = token_resp.json()["access_token"]
 
-        info_resp = await client.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {google_token}"})
-        info_resp.raise_for_status()
-        info = info_resp.json()
+            info_resp = await client.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {google_token}"})
+            info_resp.raise_for_status()
+            info = info_resp.json()
 
-    google_id = info["id"]
-    email = info["email"]
+        google_id = info["id"]
+        email = info["email"]
 
-    user = db.query(User).filter(User.google_id == google_id).first()
-    if not user:
-        user = get_user_by_email(db, email)
-        if user:
-            user.google_id = google_id
-            user.avatar_url = info.get("picture")
-        else:
-            user = User(
-                email=email,
-                full_name=info.get("name"),
-                avatar_url=info.get("picture"),
-                google_id=google_id,
-                is_verified=True,
-            )
-            db.add(user)
-        db.commit()
-        db.refresh(user)
+        user = db.query(User).filter(User.google_id == google_id).first()
+        if not user:
+            user = get_user_by_email(db, email)
+            if user:
+                user.google_id = google_id
+                user.avatar_url = info.get("picture")
+            else:
+                user = User(
+                    email=email,
+                    full_name=info.get("name"),
+                    avatar_url=info.get("picture"),
+                    google_id=google_id,
+                    is_verified=True,
+                )
+                db.add(user)
+            db.commit()
+            db.refresh(user)
 
-    return TokenPair(
-        access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
-    )
+        access_token = create_access_token(str(user.id))
+        refresh_token = create_refresh_token(str(user.id))
+        redirect_url = (
+            f"{settings.FRONTEND_URL}/auth/callback"
+            f"?access_token={access_token}&refresh_token={refresh_token}"
+        )
+        return RedirectResponse(url=redirect_url)
+    except Exception:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=oauth_failed")

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../services/api";
+import { useProfileStore } from "../store/profileStore";
 
 type Platform = "chesscom";
 type GameType = "all" | "bullet" | "blitz" | "rapid" | "classical" | "chess960";
@@ -52,6 +53,7 @@ type JobStatus = {
 
 export function ImportGames() {
   const navigate = useNavigate();
+  const { createProfile } = useProfileStore();
   const [platform, setPlatform]     = useState<Platform>("chesscom");
   const [username, setUsername]     = useState("");
   const [dateRange, setDateRange]   = useState("3m");
@@ -73,7 +75,7 @@ export function ImportGames() {
       const { data: job } = await api.get<JobStatus>(`/games/import/jobs/${jobId}`);
       setJobStatus(job);
       if (job.status === "done") {
-        await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+        await createProfile().catch(() => {});
         navigate("/dashboard");
         return;
       }

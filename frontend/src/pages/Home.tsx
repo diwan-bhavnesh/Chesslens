@@ -41,8 +41,8 @@ export function Home() {
           marginBottom: "1.25rem",
           color: "#F5F0E8",
         }}>
-          Review your chess games<br />
-          <span style={{ color: "#D4A843" }}>like a grandmaster</span>
+          Build your<br />
+          <span style={{ color: "#D4A843" }}>Chess Profile</span>
         </h1>
 
         <p style={{
@@ -53,13 +53,19 @@ export function Home() {
           marginBottom: "2.5rem",
           fontWeight: 400,
         }}>
-          Import games from Chess.com. Get deep engine analysis, pattern recognition, and personalized coaching from Claude AI.
+          Import your games from Chess.com. The more games, the more accurate your profile. We recommend 100+ games.
         </p>
 
         <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap" }}>
           {user ? (
             <Link to="/dashboard">
-              <button style={{ fontSize: "1rem", padding: "0.75rem 2rem" }}>Go to Dashboard</button>
+              <button style={{
+                fontSize: "1rem", padding: "0.75rem 2rem",
+                background: "#D4A843", color: "#0D1B2A", border: "none",
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#C49B35"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#D4A843"; }}
+              >Go to Dashboard</button>
             </Link>
           ) : (
             <>
@@ -70,7 +76,7 @@ export function Home() {
                 }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#C49B35"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#D4A843"; }}
-                >Get started free</button>
+                >Get Started</button>
               </Link>
               <Link to="/login">
                 <button className="btn-ghost" style={{ fontSize: "1rem", padding: "0.75rem 2rem" }}>Sign in</button>
@@ -95,19 +101,19 @@ export function Home() {
       }}>
         {[
           {
-            icon: "♟",
-            title: "Engine analysis",
-            desc: "Every move evaluated by Stockfish. See mistakes, blunders, and missed opportunities instantly.",
+            icon: "◎",
+            title: "Instant profile",
+            desc: "Opening repertoire, playing style, and coaching recommendations generated in seconds — no waiting.",
           },
           {
-            icon: "◎",
-            title: "AI coaching",
-            desc: "Claude explains the ideas behind positions in plain language — tailored to your level.",
+            icon: "♟",
+            title: "Deep accuracy analysis",
+            desc: "Selective Stockfish analysis identifies your real patterns across thousands of games — not just one.",
           },
           {
             icon: "⬡",
-            title: "Import anywhere",
-            desc: "Paste PGN directly or pull games from your Chess.com account with one click.",
+            title: "Scales with your library",
+            desc: "10 games or 10,000 — the more you import, the more reliable your profile becomes.",
           },
         ].map((f) => (
           <div key={f.title} style={{

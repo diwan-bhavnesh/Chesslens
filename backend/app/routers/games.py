@@ -6,7 +6,7 @@ import uuid
 
 from app.database import get_db, SessionLocal
 from app.models.user import User
-from app.models.game import Game, ImportJob
+from app.models.game import Game, ImportJob, PlayerProfile
 from app.routers.deps import get_current_user
 from app.schemas.game import GameDetailOut, GameImportRequest, GameOut, ImportJobOut, PGNImportRequest
 from app.services import chesscom
@@ -60,6 +60,7 @@ def clear_all_games(
     current_user: User = Depends(get_current_user),
 ):
     db.query(Game).filter(Game.user_id == current_user.id).delete()
+    db.query(PlayerProfile).filter(PlayerProfile.user_id == current_user.id).delete()
     db.commit()
 
 
@@ -202,6 +203,10 @@ async def _run_import(job_id: str, user_id: str, platform: str, payload: GameImp
                 if ext_id:
                     existing_ids.add(ext_id)
                 saved_count += 1
+                if saved_count % 50 == 0:
+                    db.commit()
+                    job.games_imported = saved_count
+                    db.commit()
 
         db.commit()
         job.status = "done"

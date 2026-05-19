@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine
-from app.routers import auth, games, analysis, users
+from app.routers import auth, games, analysis, users, profile
 
 Base.metadata.create_all(bind=engine)
 
@@ -21,6 +21,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(games.router, prefix="/games", tags=["games"])
 app.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
+app.include_router(profile.router, prefix="/profile", tags=["profile"])
 
 
 @app.get("/health")

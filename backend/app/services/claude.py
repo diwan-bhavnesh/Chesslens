@@ -146,6 +146,89 @@ Be specific, educational, and encouraging."""
     return response.content[0].text
 
 
+def synthesize_player_profile(structured_data: dict) -> dict:
+    """
+    Layer 1 profile synthesis — based on openings, win rates, and rating trajectory only.
+    structured_data: {player_name, total_games, win_pct_white, win_pct_black,
+                      openings_white, openings_black, opponent_openings, rating_range}
+    """
+    openings_w = structured_data.get("openings_white") or []
+    openings_b = structured_data.get("openings_black") or []
+    opp_openings = structured_data.get("opponent_openings") or []
+    rr = structured_data.get("rating_range") or {}
+
+    def fmt_openings(lst: list) -> str:
+        if not lst:
+            return "not enough data"
+        return ", ".join(
+            f"{o['name']} ({o['games']}G {o['wins']}W {o['losses']}L)" for o in lst[:4]
+        )
+
+    def fmt_opp(lst: list) -> str:
+        if not lst:
+            return "not enough data"
+        return ", ".join(f"{o['name']} ({o['times_faced']} times, {o['wins']}W)" for o in lst[:3])
+
+    rating_str = (
+        f"Current {rr.get('latest', 'unknown')} | Range {rr.get('min', '?')}–{rr.get('max', '?')}"
+        if rr else "unknown"
+    )
+    wp_w = f"{structured_data.get('win_pct_white', 0):.1f}%" if structured_data.get('win_pct_white') is not None else "unknown"
+    wp_b = f"{structured_data.get('win_pct_black', 0):.1f}%" if structured_data.get('win_pct_black') is not None else "unknown"
+
+    prompt = f"""You are a chess coach generating a player profile. Base your analysis entirely on the opening repertoire and win rates provided — no engine data is available yet.
+
+PLAYER: {structured_data.get('player_name', 'the player')}
+STATS:
+- Total games: {structured_data.get('total_games', 0)}
+- Win rate as White: {wp_w} | Win rate as Black: {wp_b}
+- Rating: {rating_str}
+- Openings as White: {fmt_openings(openings_w)}
+- Openings as Black: {fmt_openings(openings_b)}
+- Most-faced opponent openings: {fmt_opp(opp_openings)}
+
+Return ONLY this JSON — no markdown, no commentary:
+{{
+  "playing_style": {{
+    "classification": "positional",
+    "description": "2-sentence description inferred from opening choices and win rates.",
+    "evidence": ["opening-based observation 1", "win-rate observation 2"]
+  }},
+  "tactical_patterns": [
+    {{"pattern": "Pattern name", "description": "1-sentence note on what their openings suggest about their play.", "frequency": "common"}}
+  ],
+  "coaching_recommendations": [
+    {{"title": "Short actionable title", "detail": "1-2 sentence recommendation referencing specific openings or win rates.", "priority": "high"}}
+  ]
+}}
+
+Rules:
+- classification: one of aggressive / defensive / positional / tactical
+- evidence: exactly 2 items, grounded in the stats above
+- tactical_patterns: exactly 2 items, frequency one of common / occasional / rare
+- coaching_recommendations: exactly 3 items, priority one of high / medium / low
+- Reference specific opening names and win rates — no generic advice"""
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = response.content[0].text.strip()
+    # Strip markdown code fences if present
+    if "```" in text:
+        parts = text.split("```")
+        for part in parts:
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            try:
+                return json.loads(part)
+            except Exception:
+                continue
+    return json.loads(text)
+
+
 def annotate_move(move: dict, board_context: str) -> str:
     prompt = f"""Chess position context: {board_context}
 Move played: {move['san']} ({move['classification']})

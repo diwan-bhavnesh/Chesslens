@@ -86,6 +86,50 @@ class BatchAnalysis(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PlayerProfile(Base):
+    __tablename__ = "player_profiles"
+
+    id = Column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
+    user_id = Column(String(32), ForeignKey("users.id"), nullable=False, unique=True)
+    status = Column(String, default="pending")  # pending | running | done | failed
+
+    rating_history = Column(JSON, nullable=True)      # [{date, elo, color}]
+    accuracy_history = Column(JSON, nullable=True)    # [{date, accuracy_white, accuracy_black}]
+    phase_accuracy = Column(JSON, nullable=True)      # {opening, middlegame, endgame, game_count}
+    time_pressure = Column(JSON, nullable=True)       # {normal_accuracy, pressure_accuracy, threshold_seconds, games_analyzed}
+    openings_white = Column(JSON, nullable=True)      # [{name, games, wins, draws, losses}]
+    openings_black = Column(JSON, nullable=True)      # [{name, games, wins, draws, losses}]
+    opponent_openings = Column(JSON, nullable=True)   # [{name, times_faced, wins, draws, losses}]
+    claude_profile = Column(JSON, nullable=True)      # {playing_style, tactical_patterns, coaching_recommendations}
+
+    win_pct_white = Column(Float, nullable=True)
+    win_pct_black = Column(Float, nullable=True)
+    total_games = Column(Integer, nullable=True)
+    total_wins = Column(Integer, nullable=True)
+    total_draws = Column(Integer, nullable=True)
+    total_losses = Column(Integer, nullable=True)
+    claude_error = Column(Text, nullable=True)
+
+    # Layer 2 progress tracking
+    games_total = Column(Integer, nullable=True)      # unanalyzed games in current Layer 2 run
+    games_done = Column(Integer, nullable=True)       # games processed so far
+    progress = Column(String, nullable=True)          # human-readable status message
+    game_count_at_last_build = Column(Integer, nullable=True)  # total_games snapshot at build time
+
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FenEvalCache(Base):
+    __tablename__ = "fen_eval_cache"
+
+    fen_hash = Column(String(64), primary_key=True)
+    eval_cp = Column(Integer, nullable=False)
+    depth = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Move(Base):
     __tablename__ = "moves"
 

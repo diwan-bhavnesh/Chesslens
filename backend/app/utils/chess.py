@@ -1,6 +1,7 @@
 import chess
 import chess.pgn
 import io
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -28,6 +29,13 @@ def centipawns_to_display(cp: int, color: str) -> float:
 
 
 def get_game_headers(game: chess.pgn.Game) -> dict:
+    opening = game.headers.get("Opening")
+    if not opening:
+        ecurl = game.headers.get("ECOUrl", "")
+        if ecurl:
+            slug = ecurl.rstrip("/").split("/")[-1]
+            # Strip move annotations like "-3...e6-4.Bg2" or "-4.c4-Nf6"
+            opening = re.split(r'-\d+[\.\.]', slug)[0].replace("-", " ").strip() or None
     return {
         "white": game.headers.get("White", "?"),
         "black": game.headers.get("Black", "?"),
@@ -35,7 +43,7 @@ def get_game_headers(game: chess.pgn.Game) -> dict:
         "black_elo": _safe_int(game.headers.get("BlackElo")),
         "result": game.headers.get("Result"),
         "time_control": game.headers.get("TimeControl"),
-        "opening": game.headers.get("Opening"),
+        "opening": opening,
         "date": game.headers.get("Date"),
         "event": game.headers.get("Event"),
     }
@@ -66,6 +74,15 @@ def _safe_int(value: Optional[str]) -> Optional[int]:
         return int(value) if value and value != "?" else None
     except (ValueError, TypeError):
         return None
+
+
+def parse_clock_comment(comment: str) -> Optional[float]:
+    """Extract remaining seconds from a '[%clk h:mm:ss]' PGN move comment."""
+    match = re.search(r'\[%clk (\d+):(\d+):(\d+)\]', comment)
+    if not match:
+        return None
+    h, m, s = int(match.group(1)), int(match.group(2)), int(match.group(3))
+    return h * 3600 + m * 60 + s
 
 
 def parse_pgn_date(date_str: Optional[str]) -> Optional[datetime]:

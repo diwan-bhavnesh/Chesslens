@@ -152,6 +152,96 @@ export interface BatchAnalysis {
   created_at: string;
 }
 
+// ── Player Profile Engine types ───────────────────────────────────────────────
+
+export interface RatingPoint {
+  date: string;
+  elo: number;
+  color: "white" | "black";
+}
+
+export interface AccuracyHistoryPoint {
+  date: string;
+  accuracy: number;
+  color: "white" | "black";
+}
+
+export interface PhaseAccuracy {
+  opening: number | null;
+  middlegame: number | null;
+  endgame: number | null;
+  game_count: number;
+}
+
+export interface TimePressure {
+  normal_accuracy: number | null;
+  pressure_accuracy: number | null;
+  threshold_seconds: number;
+  games_analyzed: number;
+}
+
+export interface OpeningStat2 {
+  name: string;
+  games: number;
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+export interface OpponentOpening {
+  name: string;
+  times_faced: number;
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+export interface PlayingStyle {
+  classification: "aggressive" | "defensive" | "positional" | "tactical";
+  description: string;
+  evidence: string[];
+}
+
+export interface CoachingRecommendation {
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface ClaudeProfile {
+  playing_style: PlayingStyle;
+  tactical_patterns: TacticalPattern[];
+  coaching_recommendations: CoachingRecommendation[];
+}
+
+export interface PlayerProfile {
+  id: string;
+  user_id: string;
+  status: "pending" | "running" | "done" | "failed";
+  rating_history: RatingPoint[] | null;
+  accuracy_history: AccuracyHistoryPoint[] | null;
+  phase_accuracy: PhaseAccuracy | null;
+  time_pressure: TimePressure | null;
+  openings_white: OpeningStat2[] | null;
+  openings_black: OpeningStat2[] | null;
+  opponent_openings: OpponentOpening[] | null;
+  claude_profile: ClaudeProfile | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  progress: string | null;
+  games_total: number | null;
+  games_done: number | null;
+  game_count_at_last_build: number | null;
+  win_pct_white: number | null;
+  win_pct_black: number | null;
+  total_games: number | null;
+  total_wins: number | null;
+  total_draws: number | null;
+  total_losses: number | null;
+  claude_error: string | null;
+}
+
 // ── Legacy analytics types (kept for reference) ──────────────────────────────
 
 export interface AccuracyPoint {
