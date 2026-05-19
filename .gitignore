@@ -6,9 +6,16 @@ frontend/.env
 # Python cache
 __pycache__/
 *.py[cod]
+*.pyo
 
-# Database
-backend/chesslens.db
+# Virtual environment
+venv/
+.venv/
+
+# Database — all SQLite files
+*.db
+*.sqlite
+*.sqlite3
 
 # Node
 frontend/node_modules/
@@ -22,3 +29,6 @@ frontend/dist/
 # IDE/editor
 .vscode/
 .idea/
+
+# Claude Code local settings
+.claude/
