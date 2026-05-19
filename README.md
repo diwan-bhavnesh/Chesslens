@@ -90,8 +90,8 @@ cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# Copy and fill in environment variables
-cp .env.example .env   # see Environment Variables section below
+# Create your env file from the template, then fill in the required values
+cp .env.example .env
 
 python3 -m uvicorn app.main:app --reload --port 8000
 ```
@@ -109,26 +109,18 @@ npm run build        # production build
 
 ## Environment Variables
 
-Create `backend/.env`:
+Copy `backend/.env.example` to `backend/.env` and fill in the values. The file has inline comments explaining each variable.
 
-```env
-DATABASE_URL=sqlite:///./chesslens.db
-SECRET_KEY=your-secret-key-here
+**Required to run:**
+- `DATABASE_URL` — defaults to SQLite, created automatically
+- `SECRET_KEY` — any random string (use `python3 -c "import secrets; print(secrets.token_hex(32))"`)
+- `STOCKFISH_PATH` — path to the Stockfish binary on your machine
 
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+**Optional (app works without these):**
+- `ANTHROPIC_API_KEY` — needed for playing style classification and coaching recommendations. Without it, the profile builds but those sections will be empty.
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — needed for "Sign in with Google" only. Email/password registration and login work without it.
 
-# Google OAuth
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-
-# Stockfish
-STOCKFISH_PATH=/usr/local/bin/stockfish
-STOCKFISH_DEPTH=15          # per-game review depth
-STOCKFISH_BULK_DEPTH=1      # Layer 2 bulk profile depth
-```
-
-> **Note:** `STOCKFISH_BULK_DEPTH=1` intentionally trades accuracy for speed (<60s for 500+ games). The Accuracy Over Time chart reflects this and carries a "trend indicator" disclaimer. Increasing depth to 5–8 is a planned improvement.
+> `STOCKFISH_BULK_DEPTH=1` intentionally trades accuracy for speed (<60s for 500+ games). The Accuracy Over Time chart carries a "trend indicator" disclaimer. Increasing to depth 5–8 is a planned improvement.
 
 ---
 
