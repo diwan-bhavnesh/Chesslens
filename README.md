@@ -76,7 +76,10 @@ chesslens/
 
 - Python 3.9+
 - Node.js 18+
-- [Stockfish](https://stockfishchess.org/download/) installed and on your PATH (or set `STOCKFISH_PATH` in `.env`)
+- **Stockfish binary** — the chess engine executable must be installed separately on your machine. The Python `stockfish` package (in `requirements.txt`) is only a wrapper that calls the binary; it does not bundle the engine itself.
+  - macOS: `brew install stockfish`
+  - Linux: `apt install stockfish` or download from [stockfishchess.org](https://stockfishchess.org/download/)
+  - Windows: download the `.exe` from [stockfishchess.org](https://stockfishchess.org/download/) and set `STOCKFISH_PATH` in `.env` to the full path
 - Anthropic API key
 - Google OAuth credentials (for Google sign-in)
 
