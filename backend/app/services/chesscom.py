@@ -99,6 +99,7 @@ def normalize_chesscom_game(raw: dict) -> dict:
         "black_elo": raw.get("black", {}).get("rating"),
         "result": _parse_result(raw.get("white", {}).get("result"), raw.get("black", {}).get("result")),
         "time_control": raw.get("time_control"),
+        "variant": raw.get("rules", "chess"),
         "played_at": played_at,
     }
 

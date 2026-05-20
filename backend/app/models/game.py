@@ -36,6 +36,7 @@ class Game(Base):
     black_elo = Column(Integer, nullable=True)
     result = Column(String, nullable=True)  # "1-0" | "0-1" | "1/2-1/2"
     time_control = Column(String, nullable=True)
+    variant = Column(String, nullable=True)  # "chess" | "chess960"
     opening = Column(String, nullable=True)
     played_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

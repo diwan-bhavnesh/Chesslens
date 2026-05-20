@@ -151,6 +151,12 @@ async def import_games(
     if not payload.username or not payload.username.strip():
         raise HTTPException(status_code=422, detail="Username cannot be empty.")
 
+    # Persist the Chess.com username on the user record so the frontend
+    # can derive userIsWhite correctly for opponent/result display.
+    if platform == "chesscom" and current_user.chesscom_username != payload.username:
+        current_user.chesscom_username = payload.username
+        db.commit()
+
     job = ImportJob(
         user_id=current_user.id,
         platform=platform,

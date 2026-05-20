@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useGameStore } from "../store/gameStore";
 import { useFilterStore } from "../store/filterStore";
+import { useAuthStore } from "../store/authStore";
 import type { Game } from "../types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getTimeCategory(tc: string | null) {
+function getTimeCategory(tc: string | null, variant: string | null): string {
+  if (variant === "chess960") return "chess960";
   if (!tc) return "other";
   const [b = "0", i = "0"] = tc.split("+");
   const tot = parseInt(b) + parseInt(i) * 40;
@@ -21,23 +23,47 @@ function isWithinDays(dateStr: string | null, days: number) {
   return new Date(dateStr).getTime() >= Date.now() - days * 86_400_000;
 }
 
-function formatDate(s: string | null) {
+function relativeDate(s: string | null): string {
   if (!s) return "—";
-  return new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const d = new Date(s);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  const diffDays = Math.floor(diff / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7)  return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? "s" : ""} ago`;
+  const now_ = new Date();
+  if (d.getFullYear() !== now_.getFullYear()) {
+    return d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+  }
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function userOutcome(game: Game, username: string | null): "win" | "loss" | "draw" {
+  const r = game.result;
+  if (r === "1/2-1/2") return "draw";
+  const userIsWhite = game.white_player?.toLowerCase() === username?.toLowerCase();
+  if ((userIsWhite && r === "1-0") || (!userIsWhite && r === "0-1")) return "win";
+  return "loss";
+}
+
+function initials(name: string | null): string {
+  if (!name) return "?";
+  const parts = name.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
 // ── Filter config ─────────────────────────────────────────────────────────────
 
-const PLATFORM_OPTS = [
-  { value: "all", label: "All" }, { value: "chesscom", label: "Chess.com" },
-];
 const RESULT_OPTS = [
-  { value: "all", label: "All" }, { value: "1-0", label: "White wins" },
-  { value: "0-1", label: "Black wins" }, { value: "1/2-1/2", label: "Draw" },
+  { value: "all", label: "All" }, { value: "win", label: "Win" },
+  { value: "loss", label: "Loss" }, { value: "draw", label: "Draw" },
 ];
 const TYPE_OPTS = [
   { value: "all", label: "All" }, { value: "bullet", label: "Bullet" }, { value: "blitz", label: "Blitz" },
-  { value: "rapid", label: "Rapid" }, { value: "classical", label: "Classical" },
+  { value: "rapid", label: "Rapid" }, { value: "classical", label: "Classical" }, { value: "chess960", label: "Chess960" },
 ];
 const DATE_OPTS = [
   { value: "all", label: "All time", days: 0 }, { value: "15d", label: "15 days", days: 15 },
@@ -47,91 +73,289 @@ const DATE_OPTS = [
 
 // ── UI primitives ─────────────────────────────────────────────────────────────
 
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+type PillGroup = "result" | "type" | "period";
+
+const PILL_ACTIVE_STYLES: Record<string, Record<string, React.CSSProperties>> = {
+  result: {
+    win:  { background: "rgba(34,197,94,0.12)",   borderColor: "rgba(34,197,94,0.35)",   color: "#4ADE80" },
+    loss: { background: "rgba(239,68,68,0.12)",   borderColor: "rgba(239,68,68,0.35)",   color: "#F87171" },
+    draw: { background: "rgba(100,116,139,0.15)", borderColor: "rgba(100,116,139,0.35)", color: "#94A3B8" },
+  },
+  type: {
+    bullet:    { background: "rgba(251,191,36,0.12)", borderColor: "rgba(251,191,36,0.35)", color: "#FCD34D" },
+    blitz:     { background: "rgba(244,63,94,0.12)",  borderColor: "rgba(244,63,94,0.35)",  color: "#FCA5A5" },
+    rapid:     { background: "rgba(52,211,153,0.12)", borderColor: "rgba(52,211,153,0.35)", color: "#6EE7B7" },
+    classical: { background: "rgba(99,102,241,0.12)", borderColor: "rgba(99,102,241,0.35)", color: "#C7D2FE" },
+    chess960:  { background: "rgba(14,165,233,0.12)", borderColor: "rgba(14,165,233,0.35)", color: "#7DD3FC" },
+  },
+};
+
+const PILL_BASE: React.CSSProperties = {
+  padding: "5px 14px", borderRadius: 7, fontSize: "0.75rem", fontWeight: 500,
+  cursor: "pointer", border: "1px solid transparent", background: "transparent",
+  color: "#4D6A82", transition: "all 0.13s", letterSpacing: "0.1px",
+  fontFamily: "'Cabinet Grotesk', sans-serif", whiteSpace: "nowrap",
+};
+const PILL_DEFAULT_ACTIVE: React.CSSProperties = {
+  background: "#1A2E45", borderColor: "rgba(255,255,255,0.14)", color: "#F5F0E8",
+};
+
+function Pill({ active, onClick, children, group, value }: {
+  active: boolean; onClick: () => void; children: React.ReactNode;
+  group?: PillGroup; value?: string;
+}) {
+  const activeStyle = group && value && PILL_ACTIVE_STYLES[group]?.[value]
+    ? PILL_ACTIVE_STYLES[group][value]
+    : PILL_DEFAULT_ACTIVE;
   return (
-    <button type="button" onClick={onClick} style={{
-      fontSize: "0.8125rem", fontWeight: active ? 600 : 500,
-      fontFamily: "'Cabinet Grotesk', sans-serif",
-      padding: "0.3rem 0.7rem", borderRadius: "99px",
-      border: active ? "1.5px solid #2563EB" : "1px solid rgba(255,255,255,0.09)",
-      background: active ? "#1A2E45" : "transparent",
-      color: active ? "#F5F0E8" : "#8FA3B8",
-      cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap", lineHeight: 1.4,
-    }}>
+    <button type="button" onClick={onClick}
+      style={{ ...PILL_BASE, ...(active ? activeStyle : {}) }}>
       {children}
     </button>
   );
 }
 
-function FilterGroup({ label, opts, value, onChange }: {
-  label: string; opts: { value: string; label: string }[]; value: string; onChange: (v: string) => void;
-}) {
+function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-      <span style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "#4D6A82", whiteSpace: "nowrap" }}>
-        {label}
-      </span>
-      {opts.map(o => <Pill key={o.value} active={value === o.value} onClick={() => onChange(o.value)}>{o.label}</Pill>)}
-    </div>
+    <span style={{
+      fontSize: "0.5625rem", fontWeight: 700, color: "#4D6A82",
+      textTransform: "uppercase", letterSpacing: "1.2px",
+      whiteSpace: "nowrap", width: 46, flexShrink: 0, lineHeight: 1,
+    }}>{children}</span>
   );
 }
 
+function Divider({ vertical }: { vertical?: boolean }) {
+  return <div style={vertical
+    ? { width: 1, height: 20, background: "rgba(255,255,255,0.07)", flexShrink: 0 }
+    : { height: 1, background: "rgba(255,255,255,0.07)" }
+  } />;
+}
+
 function FiltersBar() {
-  const { platform, result, gameType, dateKey, setPlatform, setResult, setGameType, setDateKey, clearFilters } = useFilterStore();
-  const hasFilters = platform !== "all" || result !== "all" || gameType !== "all" || dateKey !== "all";
+  const { result, gameType, dateKey, setResult, setGameType, setDateKey, clearFilters } = useFilterStore();
+  const hasFilters = result !== "all" || gameType !== "all" || dateKey !== "all";
+  const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "2rem" };
+  const groupStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 6 };
   return (
     <div style={{
-      border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, background: "#112236",
-      padding: "1rem 1.25rem", marginBottom: "1.5rem",
+      background: "#132840", borderRadius: 12, padding: "1rem 1.75rem",
+      marginBottom: "1rem", boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
       display: "flex", flexDirection: "column", gap: "0.75rem",
     }}>
-      <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-start" }}>
-        <FilterGroup label="Platform" opts={PLATFORM_OPTS} value={platform} onChange={setPlatform} />
-        <div style={{ width: 1, background: "rgba(255,255,255,0.07)", alignSelf: "stretch" }} />
-        <FilterGroup label="Result"   opts={RESULT_OPTS}   value={result}   onChange={setResult}   />
+      {/* Row 1: Result + Type */}
+      <div style={rowStyle}>
+        <div style={groupStyle}>
+          <FilterLabel>Result</FilterLabel>
+          {RESULT_OPTS.map(o => (
+            <Pill key={o.value} active={result === o.value} onClick={() => setResult(o.value)} group="result" value={o.value}>
+              {o.label}
+            </Pill>
+          ))}
+        </div>
+        <Divider vertical />
+        <div style={groupStyle}>
+          <FilterLabel>Type</FilterLabel>
+          {TYPE_OPTS.map(o => (
+            <Pill key={o.value} active={gameType === o.value} onClick={() => setGameType(o.value)} group="type" value={o.value}>
+              {o.label}
+            </Pill>
+          ))}
+        </div>
       </div>
-      <div style={{ height: "1px", background: "rgba(255,255,255,0.07)" }} />
-      <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
-        <FilterGroup label="Type"   opts={TYPE_OPTS} value={gameType} onChange={setGameType} />
-        <div style={{ width: 1, background: "rgba(255,255,255,0.07)", alignSelf: "stretch" }} />
-        <FilterGroup label="Period" opts={DATE_OPTS} value={dateKey}  onChange={setDateKey}  />
+      {/* Row 2: Period + Clear */}
+      <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+        <div style={groupStyle}>
+          <FilterLabel>Period</FilterLabel>
+          {DATE_OPTS.map(o => (
+            <Pill key={o.value} active={dateKey === o.value} onClick={() => setDateKey(o.value)}>
+              {o.label}
+            </Pill>
+          ))}
+        </div>
         {hasFilters && (
           <button type="button" onClick={clearFilters} style={{
-            marginLeft: "auto", fontSize: "0.8125rem", fontWeight: 500,
-            fontFamily: "'Cabinet Grotesk', sans-serif",
-            padding: "0.3rem 0.75rem", borderRadius: "99px",
-            border: "1px solid rgba(255,255,255,0.09)", background: "#112236", color: "#8FA3B8", cursor: "pointer",
-          }}>
-            Clear all
-          </button>
+            fontSize: "0.75rem", fontWeight: 500, fontFamily: "'Cabinet Grotesk', sans-serif",
+            padding: "5px 14px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.09)",
+            background: "transparent", color: "#8FA3B8", cursor: "pointer",
+          }}>Clear all</button>
         )}
       </div>
     </div>
   );
 }
 
-function ResultChip({ result }: { result: string | null }) {
-  const map: Record<string, { label: string; color: string; bg: string }> = {
-    "1-0":     { label: "1-0", color: "#34d399", bg: "rgba(52,211,153,0.12)" },
-    "0-1":     { label: "0-1", color: "#f87171", bg: "rgba(248,113,113,0.12)" },
-    "1/2-1/2": { label: "½-½", color: "#8FA3B8", bg: "rgba(143,163,184,0.12)" },
-  };
-  if (!result || !map[result]) return <span style={{ color: "#4D6A82" }}>—</span>;
-  const { label, color, bg } = map[result];
-  return <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 5, fontSize: "0.75rem", fontWeight: 700, color, background: bg }}>{label}</span>;
+// ── Stats strip ───────────────────────────────────────────────────────────────
+
+function StatsStrip({ total, wins, draws, losses, dateRange }: {
+  total: number; wins: number; draws: number; losses: number; dateRange: string;
+}) {
+  const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+  const r = 26;
+  const circ = 2 * Math.PI * r; // ≈ 163.4
+  const offset = circ - (winRate / 100) * circ;
+  return (
+    <div style={{
+      display: "grid", gridTemplateColumns: "auto 1px 1fr 1px auto",
+      background: "#132840", borderRadius: 12, marginBottom: "1.25rem",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.35)", overflow: "hidden",
+    }}>
+      {/* Total */}
+      <div style={{ padding: "1.25rem 1.5rem 1.25rem 2rem", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2 }}>
+        <div style={{ fontSize: "2rem", fontWeight: 700, lineHeight: 1, letterSpacing: "-1px", color: "#F5F0E8", fontVariantNumeric: "tabular-nums" }}>{total}</div>
+        <div style={{ fontSize: "0.625rem", color: "#4D6A82", textTransform: "uppercase", letterSpacing: "0.8px", marginTop: 4 }}>Games</div>
+        {dateRange && <div style={{ fontSize: "0.6875rem", color: "#4D6A82", marginTop: 6 }}>{dateRange}</div>}
+      </div>
+
+      {/* Vertical divider */}
+      <div style={{ background: "rgba(255,255,255,0.06)", margin: "1rem 0" }} />
+
+      {/* W/D/L + bar */}
+      <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "1.5rem" }}>
+          {[
+            { n: wins,   l: "W", c: "#22C55E" },
+            { n: draws,  l: "D", c: "#4D6A82" },
+            { n: losses, l: "L", c: "#EF4444" },
+          ].map(({ n, l, c }) => (
+            <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+              <span style={{ fontSize: "1.25rem", fontWeight: 700, lineHeight: 1, color: c, fontVariantNumeric: "tabular-nums" }}>{n}</span>
+              <span style={{ fontSize: "0.625rem", color: "#4D6A82", textTransform: "uppercase", letterSpacing: "0.6px" }}>{l}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ height: 6, borderRadius: 3, overflow: "hidden", display: "flex", gap: 2, maxWidth: 400 }}>
+          {total > 0 && <>
+            <div style={{ background: "#22C55E", flex: wins, borderRadius: 3, minWidth: wins > 0 ? 3 : 0 }} />
+            <div style={{ background: "#4D6A82", flex: draws, borderRadius: 3, minWidth: draws > 0 ? 3 : 0 }} />
+            <div style={{ background: "#EF4444", flex: losses, borderRadius: 3, minWidth: losses > 0 ? 3 : 0 }} />
+          </>}
+        </div>
+      </div>
+
+      {/* Vertical divider */}
+      <div style={{ background: "rgba(255,255,255,0.06)", margin: "1rem 0" }} />
+
+      {/* Win rate ring */}
+      <div style={{ padding: "1.25rem 2rem 1.25rem 1.5rem", display: "flex", alignItems: "center", gap: "1.25rem" }}>
+        <div style={{ position: "relative", width: 64, height: 64, flexShrink: 0 }}>
+          <svg width="64" height="64" viewBox="0 0 64 64" style={{ transform: "rotate(-90deg)" }}>
+            <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+            <circle cx="32" cy="32" r={r} fill="none" stroke="#22C55E" strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray={circ}
+              strokeDashoffset={offset}
+              style={{ transition: "stroke-dashoffset 1s ease" }}
+            />
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#22C55E", lineHeight: 1 }}>{winRate}%</span>
+            <span style={{ fontSize: "0.4375rem", color: "#4D6A82", textTransform: "uppercase", letterSpacing: "0.5px", marginTop: 2 }}>Win</span>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "#F5F0E8" }}>Win Rate</div>
+          <div style={{ fontSize: "0.6875rem", color: "#4D6A82", marginTop: 3 }}>Last {total} games</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function TypeChip({ tc }: { tc: string | null }) {
-  const cat = getTimeCategory(tc);
-  if (cat === "other") return <span style={{ color: "#4D6A82" }}>—</span>;
-  const colors: Record<string, { color: string; bg: string }> = {
-    bullet:    { color: "#fbbf24", bg: "rgba(251,191,36,0.12)" },
-    blitz:     { color: "#60a5fa", bg: "rgba(96,165,250,0.12)" },
-    rapid:     { color: "#34d399", bg: "rgba(52,211,153,0.12)" },
-    classical: { color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
-  };
-  const { color, bg } = colors[cat] ?? { color: "#8FA3B8", bg: "rgba(143,163,184,0.12)" };
-  return <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 5, fontSize: "0.75rem", fontWeight: 600, color, background: bg, textTransform: "capitalize" }}>{cat}</span>;
+// ── Sort toolbar ──────────────────────────────────────────────────────────────
+
+function SortToolbar({ total, page, pageSize }: { total: number; page: number; pageSize: number }) {
+  const { sortBy, sortDir, setSortBy, setSortDir } = useFilterStore();
+
+  function handleSort(key: "date" | "accuracy" | "result") {
+    if (sortBy === key) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortBy(key);
+      setSortDir("desc");
+    }
+  }
+
+  const arrow = (key: string) => sortBy === key ? (sortDir === "desc" ? " ↓" : " ↑") : "";
+  const sortBtnStyle = (key: string): React.CSSProperties => ({
+    padding: "3px 9px", borderRadius: 5, fontSize: "0.6875rem", cursor: "pointer",
+    border: "1px solid transparent", background: "transparent",
+    fontFamily: "'Cabinet Grotesk', sans-serif",
+    color: sortBy === key ? "#F5F0E8" : "#4D6A82", transition: "all 0.12s",
+    ...(sortBy === key ? { background: "#132840", borderColor: "rgba(255,255,255,0.1)" } : {}),
+  });
+  const start = page * pageSize + 1;
+  const end = Math.min((page + 1) * pageSize, total);
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 0 0.625rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.6875rem", color: "#4D6A82" }}>
+        <span>Sort</span>
+        <button style={sortBtnStyle("date")}     onClick={() => handleSort("date")}>Date{arrow("date")}</button>
+        <button style={sortBtnStyle("accuracy")} onClick={() => handleSort("accuracy")}>Accuracy{arrow("accuracy")}</button>
+        <button style={sortBtnStyle("result")}   onClick={() => handleSort("result")}>Result{arrow("result")}</button>
+      </div>
+      <span style={{ fontSize: "0.6875rem", color: "#4D6A82" }}>
+        {total > 0 ? `${start}–${end} of ${total} games` : "0 games"}
+      </span>
+    </div>
+  );
+}
+
+// ── Chip components ───────────────────────────────────────────────────────────
+
+const TYPE_STYLES: Record<string, { color: string; bg: string; dot: string }> = {
+  bullet:    { color: "#FCD34D", bg: "rgba(251,191,36,0.1)",  dot: "#F59E0B" },
+  blitz:     { color: "#FCA5A5", bg: "rgba(244,63,94,0.1)",   dot: "#F43F5E" },
+  rapid:     { color: "#6EE7B7", bg: "rgba(52,211,153,0.1)",  dot: "#34D399" },
+  classical: { color: "#C7D2FE", bg: "rgba(99,102,241,0.1)",  dot: "#818CF8" },
+  chess960:  { color: "#7DD3FC", bg: "rgba(14,165,233,0.1)",  dot: "#38BDF8" },
+};
+
+function TypeChip({ tc, variant }: { tc: string | null; variant: string | null }) {
+  const cat = getTimeCategory(tc, variant);
+  const s = TYPE_STYLES[cat];
+  if (!s) return <span style={{ color: "#4D6A82" }}>—</span>;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "3px 8px", borderRadius: 5, fontSize: "0.6875rem", fontWeight: 500,
+      background: s.bg, color: s.color,
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
+      {cat === "chess960" ? "Chess960" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+    </span>
+  );
+}
+
+function ResultBadge({ outcome }: { outcome: "win" | "loss" | "draw" }) {
+  const s = {
+    win:  { label: "Win",  color: "#4ADE80", bg: "rgba(34,197,94,0.12)"    },
+    loss: { label: "Loss", color: "#F87171", bg: "rgba(239,68,68,0.12)"    },
+    draw: { label: "Draw", color: "#94A3B8", bg: "rgba(100,116,139,0.15)"  },
+  }[outcome];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", padding: "3px 9px",
+      borderRadius: 5, fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.2px",
+      background: s.bg, color: s.color,
+    }}>{s.label}</span>
+  );
+}
+
+function AccuracyCell({ pct, isBulk }: { pct: number | null | undefined; isBulk: boolean }) {
+  if (pct == null) return <span style={{ color: "#4D6A82", fontSize: "0.75rem" }}>—</span>;
+  const color = pct >= 80 ? "#4ADE80" : pct >= 60 ? "#F5F0E8" : "#F87171";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <span style={{ fontSize: "0.8125rem", fontWeight: 600, color }}>{Math.round(pct)}%</span>
+        {isBulk && <span style={{ fontSize: "0.625rem", color: "#4D6A82" }} title="Bulk analysis — run Analyze for exact value">~</span>}
+      </div>
+      <div style={{ width: 48, height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 2, background: color, opacity: 0.7 }} />
+      </div>
+    </div>
+  );
 }
 
 function Spinner() {
@@ -149,146 +373,194 @@ function Spinner() {
 
 const PAGE_SIZE = 25;
 
-function Pagination({ page, totalPages, total, onPage }: {
-  page: number; totalPages: number; total: number; onPage: (p: number) => void;
+function Pagination({ page, totalPages, onPage }: {
+  page: number; totalPages: number; onPage: (p: number) => void;
 }) {
   if (totalPages <= 1) return null;
-  const start = page * PAGE_SIZE + 1;
-  const end   = Math.min((page + 1) * PAGE_SIZE, total);
+  const pgBtnStyle = (active: boolean, disabled?: boolean): React.CSSProperties => ({
+    minWidth: 30, height: 30, padding: "0 8px", borderRadius: 6,
+    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem",
+    cursor: disabled ? "default" : "pointer",
+    border: "1px solid rgba(255,255,255,0.08)", background: "transparent",
+    fontFamily: "'Cabinet Grotesk', sans-serif",
+    color: disabled ? "#4D6A82" : active ? "#F5F0E8" : "#4D6A82",
+    ...(active ? { background: "rgba(37,99,235,0.2)", borderColor: "rgba(37,99,235,0.5)" } : {}),
+  });
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "0 0.25rem" }}>
-      <span style={{ fontSize: "0.8125rem", color: "#8FA3B8" }}>{start}–{end} of {total} games</span>
-      <div style={{ display: "flex", gap: "0.375rem" }}>
-        <button onClick={() => onPage(page - 1)} disabled={page === 0} style={{
-          fontSize: "0.8125rem", fontFamily: "'Cabinet Grotesk', sans-serif",
-          padding: "0.3rem 0.75rem", borderRadius: 6,
-          border: "1px solid rgba(255,255,255,0.09)", background: "#112236",
-          color: page === 0 ? "#4D6A82" : "#2563EB", cursor: page === 0 ? "default" : "pointer",
-        }}>← Prev</button>
-        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
-          <button key={i} onClick={() => onPage(i)} style={{
-            fontSize: "0.8125rem", fontFamily: "'Cabinet Grotesk', sans-serif",
-            padding: "0.3rem 0.625rem", borderRadius: 6, minWidth: 32,
-            border: i === page ? "1.5px solid #2563EB" : "1px solid rgba(255,255,255,0.09)",
-            background: i === page ? "#1A2E45" : "#112236",
-            color: i === page ? "#F5F0E8" : "#8FA3B8",
-            cursor: "pointer", fontWeight: i === page ? 700 : 400,
-          }}>{i + 1}</button>
-        ))}
-        <button onClick={() => onPage(page + 1)} disabled={page === totalPages - 1} style={{
-          fontSize: "0.8125rem", fontFamily: "'Cabinet Grotesk', sans-serif",
-          padding: "0.3rem 0.75rem", borderRadius: 6,
-          border: "1px solid rgba(255,255,255,0.09)", background: "#112236",
-          color: page === totalPages - 1 ? "#4D6A82" : "#2563EB", cursor: page === totalPages - 1 ? "default" : "pointer",
-        }}>Next →</button>
-      </div>
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, padding: "1.25rem 0 0.25rem" }}>
+      <button style={pgBtnStyle(false, page === 0)} disabled={page === 0} onClick={() => onPage(page - 1)}>←</button>
+      {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
+        <button key={i} style={pgBtnStyle(i === page)} onClick={() => onPage(i)}>{i + 1}</button>
+      ))}
+      <button style={pgBtnStyle(false, page === totalPages - 1)} disabled={page === totalPages - 1} onClick={() => onPage(page + 1)}>→</button>
     </div>
   );
 }
 
 // ── Game table ────────────────────────────────────────────────────────────────
 
-const COL = "minmax(180px, 1.5fr) 80px 90px minmax(0, 1fr) 108px 190px";
+const COL = "200px 80px 105px 1fr 100px 120px 68px 40px";
 
-function GameTable({ games, onDelete, onAnalyze }: {
-  games: Game[];
-  onDelete: (id: string) => void;
-  onAnalyze: (id: string) => void;
+function GameRow({ game, username, onDelete, onAnalyze }: {
+  game: Game; username: string | null;
+  onDelete: (id: string) => void; onAnalyze: (id: string) => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const outcome = game.result != null ? userOutcome(game, username) : null;
+  const userIsWhite = game.white_player?.toLowerCase() === username?.toLowerCase();
+  const opponent = userIsWhite ? game.black_player : game.white_player;
+  const oppElo   = userIsWhite ? game.black_elo  : game.white_elo;
+  const isPending = game.analysis?.status === "pending";
+  const isDone    = game.analysis?.status === "done";
+  const isBulkDepth = isDone; // once we ship depth-5 bulk, all bulk results show tilde
+
+  const userAccuracy = isDone
+    ? (userIsWhite ? game.analysis?.accuracy_white : game.analysis?.accuracy_black)
+    : null;
+
+  const accentColor = outcome === "win" ? "#22C55E" : outcome === "loss" ? "#EF4444" : "#4D6A82";
+  const avatarIsBlack = !userIsWhite;
+
+  return (
+    <div style={{ position: "relative", borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background 0.1s" }}
+      onMouseEnter={e => (e.currentTarget.style.background = "#1E3550")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+    >
+      {/* left accent */}
+      {outcome && (
+        <div style={{
+          position: "absolute", left: 0, top: 6, bottom: 6, width: 3,
+          borderRadius: "0 2px 2px 0", background: accentColor,
+        }} />
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: COL, alignItems: "center", padding: "0.7rem 1.25rem 0.7rem 0" }}>
+
+        {/* Opponent */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: "1.25rem" }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "0.6875rem", fontWeight: 700,
+            background: avatarIsBlack ? "rgba(37,99,235,0.2)" : "rgba(255,255,255,0.08)",
+            color: avatarIsBlack ? "#93C5FD" : "#F5F0E8",
+          }}>
+            {initials(opponent)}
+          </div>
+          <div>
+            <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#F5F0E8", lineHeight: 1.2, display: "flex", alignItems: "center", gap: 5 }}>
+              {opponent ?? "Unknown"}
+              <span style={{
+                display: "inline-block", width: 7, height: 7, borderRadius: 2, flexShrink: 0,
+                background: userIsWhite ? "#E2E8F0" : "#2563EB",
+                border: userIsWhite ? "1px solid rgba(255,255,255,0.3)" : "1px solid #3B82F6",
+                opacity: 0.85,
+              }} title={userIsWhite ? "You played White" : "You played Black"} />
+            </div>
+            {oppElo != null && (
+              <div style={{ fontSize: "0.625rem", color: "#4D6A82", marginTop: 1 }}>{oppElo}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Result */}
+        <div>{outcome ? <ResultBadge outcome={outcome} /> : <span style={{ color: "#4D6A82" }}>—</span>}</div>
+
+        {/* Type */}
+        <div><TypeChip tc={game.time_control} variant={game.variant} /></div>
+
+        {/* Opening */}
+        <div style={{ fontSize: "0.75rem", color: "#8FA3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 12 }}>
+          {game.opening ?? <span style={{ color: "#4D6A82" }}>—</span>}
+        </div>
+
+        {/* Date */}
+        <div style={{ fontSize: "0.6875rem", color: "#4D6A82" }}>{relativeDate(game.played_at ?? game.created_at)}</div>
+
+        {/* Accuracy */}
+        <div>
+          {isPending ? (
+            <span style={{ fontSize: "0.75rem", color: "#2563EB", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <Spinner /> Analysing…
+            </span>
+          ) : (
+            <AccuracyCell pct={userAccuracy ?? undefined} isBulk={isBulkDepth} />
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {isDone ? (
+            <Link to={`/game/${game.id}`} style={{ textDecoration: "none" }}>
+              <button style={{
+                padding: "4px 10px", borderRadius: 5, fontSize: "0.6875rem", fontWeight: 500,
+                background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
+                color: "#8FA3B8", cursor: "pointer", whiteSpace: "nowrap",
+                fontFamily: "'Cabinet Grotesk', sans-serif",
+              }}>Review</button>
+            </Link>
+          ) : !isPending ? (
+            <button onClick={() => onAnalyze(game.id)} style={{
+              padding: "4px 10px", borderRadius: 5, fontSize: "0.6875rem", fontWeight: 500,
+              background: "transparent", border: "1px solid #2563EB", color: "#2563EB",
+              cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Cabinet Grotesk', sans-serif",
+            }}>Analyze</button>
+          ) : null}
+        </div>
+
+        {/* Delete */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {confirmDelete ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.6875rem", color: "#8FA3B8", whiteSpace: "nowrap" }}>
+              <button onClick={() => onDelete(game.id)} style={{
+                padding: "2px 7px", borderRadius: 4, fontSize: "0.625rem",
+                background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)",
+                color: "#F87171", cursor: "pointer", fontFamily: "'Cabinet Grotesk', sans-serif",
+              }}>Yes</button>
+              <button onClick={() => setConfirmDelete(false)} style={{
+                padding: "2px 7px", borderRadius: 4, fontSize: "0.625rem",
+                background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
+                color: "#4D6A82", cursor: "pointer", fontFamily: "'Cabinet Grotesk', sans-serif",
+              }}>No</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} title="Delete" style={{
+              width: 28, height: 28, padding: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              border: "1px solid transparent", borderRadius: 5,
+              background: "transparent", color: "#4D6A82", cursor: "pointer",
+            }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.3)"; (e.currentTarget as HTMLButtonElement).style.color = "#F87171"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "#4D6A82"; }}
+            >
+              <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+                <path d="M5 1h5M1 3.5h13M12 3.5l-.8 8.5a1 1 0 01-1 .9H4.8a1 1 0 01-1-.9L3 3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameTable({ games, username, onDelete, onAnalyze }: {
+  games: Game[]; username: string | null;
+  onDelete: (id: string) => void; onAnalyze: (id: string) => void;
 }) {
   if (games.length === 0) return null;
+  const hdrStyle: React.CSSProperties = {
+    fontSize: "0.5625rem", fontWeight: 600, color: "#4D6A82",
+    textTransform: "uppercase", letterSpacing: "1px",
+  };
   return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: COL, padding: "0 1rem", marginBottom: "0.375rem", gap: "0.75rem" }}>
-        {["Players", "Result", "Type", "Opening", "Date", ""].map((h, i) => (
-          <span key={i} style={{ fontSize: "0.6875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#4D6A82" }}>{h}</span>
+    <div style={{ background: "#132840", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.35)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: COL, padding: "9px 1.25rem 9px 1.5rem", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        {["Opponent", "Result", "Type", "Opening", "Date", "Accuracy", "", ""].map((h, i) => (
+          <span key={i} style={hdrStyle}>{h}</span>
         ))}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
-        {games.map((game, i) => {
-          const isPending = game.analysis?.status === "pending";
-          const isDone    = game.analysis?.status === "done";
-          return (
-            <div
-              key={game.id}
-              style={{
-                display: "grid", gridTemplateColumns: COL, alignItems: "center",
-                gap: "0.75rem", padding: "0.875rem 1rem", background: "#112236",
-                borderBottom: i < games.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                transition: "background 0.1s",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = "#1A2E45")}
-              onMouseLeave={e => (e.currentTarget.style.background = "#112236")}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", minWidth: 0 }}>
-                <div style={{
-                  width: 34, height: 34, flexShrink: 0,
-                  background: "linear-gradient(135deg, #1E3A5F, #2563EB)",
-                  borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "0.95rem", color: "#fff",
-                }}>♟</div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: "0.9375rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#F5F0E8" }}>
-                    {game.white_player ?? "?"} <span style={{ fontWeight: 400, color: "#4D6A82" }}>vs</span> {game.black_player ?? "?"}
-                  </div>
-                  {(game.white_elo || game.black_elo) && (
-                    <div style={{ fontSize: "0.75rem", color: "#8FA3B8", fontVariantNumeric: "tabular-nums" }}>{game.white_elo ?? "?"} — {game.black_elo ?? "?"}</div>
-                  )}
-                </div>
-              </div>
-              <div><ResultChip result={game.result} /></div>
-              <div><TypeChip tc={game.time_control} /></div>
-              <div style={{ fontSize: "0.8125rem", color: "#8FA3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {game.opening ?? <span style={{ color: "#4D6A82" }}>—</span>}
-              </div>
-              <div style={{ fontSize: "0.8125rem", color: "#8FA3B8", whiteSpace: "nowrap" }}>{formatDate(game.played_at ?? game.created_at)}</div>
-              <div style={{ display: "flex", gap: "0.4rem", justifyContent: "flex-end", alignItems: "center" }}>
-                {isPending ? (
-                  <span style={{ fontSize: "0.8rem", color: "#2563EB", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                    <Spinner /> Analysing…
-                  </span>
-                ) : isDone ? (
-                  <>
-                    <span style={{ fontSize: "0.75rem", color: "#F5F0E8", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                      {game.analysis?.accuracy_white != null ? `${game.analysis.accuracy_white}%` : "—"}
-                    </span>
-                    <Link to={`/game/${game.id}`} style={{ textDecoration: "none" }}>
-                      <button className="btn-ghost" style={{ fontSize: "0.8rem", padding: "0.3rem 0.625rem", whiteSpace: "nowrap" }}>Review</button>
-                    </Link>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => onAnalyze(game.id)}
-                    style={{
-                      fontSize: "0.8rem", padding: "0.3rem 0.625rem", whiteSpace: "nowrap",
-                      background: "transparent", border: "1px solid #2563EB", color: "#2563EB",
-                      borderRadius: 6, cursor: "pointer", fontFamily: "'Cabinet Grotesk', sans-serif",
-                    }}
-                  >
-                    Run Stockfish
-                  </button>
-                )}
-                <button
-                  onClick={() => onDelete(game.id)}
-                  title="Delete"
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 28, height: 28, padding: 0,
-                    border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6,
-                    background: "transparent", color: "#f87171", cursor: "pointer", flexShrink: 0,
-                    fontFamily: "'Cabinet Grotesk', sans-serif",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.1)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
-                    <path d="M5 1h5M1 3.5h13M12 3.5l-.8 8.5a1 1 0 01-1 .9H4.8a1 1 0 01-1-.9L3 3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {games.map(game => (
+        <GameRow key={game.id} game={game} username={username} onDelete={onDelete} onAnalyze={onAnalyze} />
+      ))}
     </div>
   );
 }
@@ -297,7 +569,10 @@ function GameTable({ games, onDelete, onAnalyze }: {
 
 export function MyGames() {
   const { games, isLoading, fetchGames, deleteGame, triggerAnalysis, refreshGameInList } = useGameStore();
-  const { platform, result, gameType, dateKey, clearFilters } = useFilterStore();
+  const { result, gameType, dateKey, sortBy, sortDir, clearFilters } = useFilterStore();
+  const { user } = useAuthStore();
+  const username = user?.chesscom_username ?? null;
+
   const [page, setPage] = useState(0);
   const gamePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingIdsRef = useRef<string[]>([]);
@@ -328,35 +603,67 @@ export function MyGames() {
 
   const filtered = useMemo(() => {
     setPage(0);
-    return games.filter((g: Game) => {
-      if (platform !== "all" && g.source !== platform) return false;
-      if (result   !== "all" && g.result !== result)   return false;
-      if (gameType !== "all" && getTimeCategory(g.time_control) !== gameType) return false;
+    const f = games.filter((g: Game) => {
+      if (result !== "all") {
+        const outcome = g.result != null ? userOutcome(g, username) : null;
+        if (outcome !== result) return false;
+      }
+      if (gameType !== "all" && getTimeCategory(g.time_control, g.variant) !== gameType) return false;
       if (dateDays > 0 && !isWithinDays(g.played_at ?? g.created_at, dateDays)) return false;
       return true;
     });
-  }, [games, platform, result, gameType, dateDays]);
+
+    return f.sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "date") {
+        const da = new Date(a.played_at ?? a.created_at).getTime();
+        const db = new Date(b.played_at ?? b.created_at).getTime();
+        cmp = da - db;
+      } else if (sortBy === "accuracy") {
+        const userIsWhiteA = a.white_player?.toLowerCase() === username?.toLowerCase();
+        const userIsWhiteB = b.white_player?.toLowerCase() === username?.toLowerCase();
+        const accA = userIsWhiteA ? (a.analysis?.accuracy_white ?? -1) : (a.analysis?.accuracy_black ?? -1);
+        const accB = userIsWhiteB ? (b.analysis?.accuracy_white ?? -1) : (b.analysis?.accuracy_black ?? -1);
+        cmp = accA - accB;
+      } else if (sortBy === "result") {
+        const rank = { win: 2, draw: 1, loss: 0 };
+        const ra = a.result != null ? rank[userOutcome(a, username)] : -1;
+        const rb = b.result != null ? rank[userOutcome(b, username)] : -1;
+        cmp = ra - rb;
+      }
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+  }, [games, result, gameType, dateDays, sortBy, sortDir, username]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const wins   = filtered.filter(g => g.result === "1-0").length;
-  const losses = filtered.filter(g => g.result === "0-1").length;
-  const draws  = filtered.filter(g => g.result === "1/2-1/2").length;
-  const hasFilters = platform !== "all" || result !== "all" || gameType !== "all" || dateKey !== "all";
+  // Stats computed from ALL filtered games (user-relative)
+  const wins   = filtered.filter(g => g.result != null && userOutcome(g, username) === "win").length;
+  const losses = filtered.filter(g => g.result != null && userOutcome(g, username) === "loss").length;
+  const draws  = filtered.filter(g => g.result != null && userOutcome(g, username) === "draw").length;
+  const hasFilters = result !== "all" || gameType !== "all" || dateKey !== "all";
+
+  // Date range label for stats strip
+  const datesWithGames = filtered.map(g => g.played_at ?? g.created_at).filter(Boolean) as string[];
+  let dateRange = "";
+  if (datesWithGames.length > 1) {
+    const sorted = [...datesWithGames].sort();
+    const fmt = (s: string) => new Date(s).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+    dateRange = `${fmt(sorted[0])} – ${fmt(sorted[sorted.length - 1])}`;
+  }
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "1.5rem 2rem 5rem", background: "#0D1B2A" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "1.75rem 2rem 5rem", background: "#0D1B2A" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
         <div>
           <h1 style={{
-            fontSize: "1.875rem", fontWeight: 800, letterSpacing: "-0.03em", marginBottom: "0.25rem",
-            background: "linear-gradient(135deg, #F5F0E8 0%, #D4A843 100%)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
+            fontSize: "1.25rem", fontWeight: 600, letterSpacing: "-0.3px",
+            color: "#F5F0E8", marginBottom: 2,
           }}>My Games</h1>
           {!isLoading && games.length > 0 && (
-            <p style={{ fontSize: "0.875rem", color: "#8FA3B8" }}>
+            <p style={{ fontSize: "0.75rem", color: "#4D6A82" }}>
               {games.length} game{games.length !== 1 ? "s" : ""} imported
             </p>
           )}
@@ -387,35 +694,19 @@ export function MyGames() {
 
       {!isLoading && games.length > 0 && (
         <>
-          {/* Stats strip */}
-          <div style={{ display: "flex", gap: "1rem", marginBottom: "1.75rem", flexWrap: "wrap" }}>
-            {[
-              { v: filtered.length, l: "Games",  c: "#2563EB", bg: "rgba(37,99,235,0.1)"   },
-              { v: wins,            l: "Wins",   c: "#34d399", bg: "rgba(52,211,153,0.1)"  },
-              { v: losses,          l: "Losses", c: "#f87171", bg: "rgba(248,113,113,0.1)" },
-              { v: draws,           l: "Draws",  c: "#8FA3B8", bg: "rgba(143,163,184,0.1)" },
-            ].map(({ v, l, c, bg }) => (
-              <div key={l} style={{
-                flex: 1, minWidth: 120, background: bg, borderRadius: 14,
-                padding: "1.25rem 1.5rem", border: `1px solid ${c}22`, boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
-              }}>
-                <span style={{ display: "block", fontSize: "2rem", fontWeight: 800, color: c, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{v}</span>
-                <span style={{ display: "block", fontSize: "0.6875rem", fontWeight: 700, color: c, opacity: 0.65, textTransform: "uppercase", letterSpacing: "0.07em", marginTop: "0.25rem" }}>{l}</span>
-              </div>
-            ))}
-          </div>
-
+          <StatsStrip total={filtered.length} wins={wins} draws={draws} losses={losses} dateRange={dateRange} />
           <FiltersBar />
 
           {filtered.length === 0 && hasFilters ? (
-            <div style={{ textAlign: "center", padding: "3rem 2rem", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, background: "#112236" }}>
+            <div style={{ textAlign: "center", padding: "3rem 2rem", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, background: "#132840" }}>
               <p style={{ fontWeight: 600, marginBottom: "0.4rem", color: "#F5F0E8" }}>No games match these filters</p>
               <button className="btn-ghost" onClick={clearFilters} style={{ fontSize: "0.875rem", marginTop: "0.5rem" }}>Clear filters</button>
             </div>
           ) : (
             <>
-              <GameTable games={paginated} onDelete={deleteGame} onAnalyze={handleAnalyze} />
-              <Pagination page={page} totalPages={totalPages} total={filtered.length} onPage={setPage} />
+              <SortToolbar total={filtered.length} page={page} pageSize={PAGE_SIZE} />
+              <GameTable games={paginated} username={username} onDelete={deleteGame} onAnalyze={handleAnalyze} />
+              <Pagination page={page} totalPages={totalPages} onPage={setPage} />
             </>
           )}
         </>

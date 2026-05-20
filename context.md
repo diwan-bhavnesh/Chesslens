@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-19 — Session 10_
+_Last updated: 2026-05-20 — Session 11_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -177,21 +177,49 @@ _Last updated: 2026-05-19 — Session 10_
 | Priority | Issue | Notes |
 |----------|-------|-------|
 | 🟡 Medium | Anthropic API credits depleted | User must top up at console.anthropic.com |
-| 🟡 Medium | Layer 2 engine depth too shallow for accurate trend data | `STOCKFISH_BULK_DEPTH=1` inflates accuracy values (85–95% range vs realistic 65–85%). Depth-1 misses tactics requiring 2+ ply lookahead; critical-positions-only filter misses quiet blunders. Goal: increase depth (target 5–8) without compromising analysis time. Accuracy Over Time chart carries a "trend indicator only" disclaimer until resolved. |
+| 🟡 Medium | My Games accuracy shows depth-1 values (`~`) | `STOCKFISH_BULK_DEPTH=1` inflates accuracy to 85–95% range (realistic is 65–85%). Plan decided (Session 11): increase to depth 5 using the running eval chain model. See plan file `splendid-twirling-walrus.md`. Deferred to a separate session. Game Review page is unaffected — uses `STOCKFISH_DEPTH=15`. |
 | 🟢 Low | `bcrypt` pinned to 3.2.2 | Cannot upgrade — passlib 1.7.4 incompatible with bcrypt ≥ 4.0 |
 
 ---
 
-## What's Next — Session 11
+## What's Next — Session 12
 
-Layer 1 + Layer 2 + Dashboard UI are complete. Confirmed deferred to separate sessions:
-- **My Games page UI review** — filters, pagination, game cards (deferred from Session 10)
-- **Game Review page UI review** — board, eval bar, move list, analysis panel (deferred from Session 10)
+- **Game Review page UI review** — board, eval bar, move list, analysis panel
 - **Playing Style & Coaching** — restore clean display when Anthropic credits are topped up
-- **Increase `STOCKFISH_BULK_DEPTH`** — target depth 5–8 without exceeding <60s build time (open issue, parked)
+- **Increase `STOCKFISH_BULK_DEPTH` to 5** — running eval chain model (see open issues + plan `splendid-twirling-walrus.md`). Files: `config.py`, `.env`, `bulk_analysis.py` (`_analyze_single_game`), `Dashboard.tsx` (remove depth-1 disclaimer)
 - Mobile responsiveness (no responsive breakpoints yet)
 - SaaS deployment (Fly.io + Postgres migration)
 - User-facing onboarding flow (first-time experience not guided)
+
+## Session 11 (2026-05-20) — My Games Page Overhaul
+
+**Built:** Full My Games redesign + Chess960 support.
+
+**Backend:**
+- `game.py`: added `variant = Column(String, nullable=True)` column for Chess960 detection
+- `chesscom.py`: `normalize_chesscom_game()` now captures `"variant": raw.get("rules", "chess")`
+- `schemas/game.py`: `GameOut` exposes `variant: Optional[str] = None`
+- `routers/games.py`: import route now saves `chesscom_username` to the user record on every Chess.com import
+- SQLite migration: `ALTER TABLE games ADD COLUMN variant VARCHAR`
+- DB backfill: `chesscom_username = 'bhavnesh123'` set for existing account
+
+**Frontend:**
+- `types/index.ts`: `Game` interface gains `variant: string | null`
+- `filterStore.ts`: removed `platform` state; result values changed to `"win"/"loss"/"draw"`; added `sortBy` / `sortDir`
+- `MyGames.tsx`: full rewrite —
+  - Stats strip: Total | W/D/L stacked bar | SVG win-rate ring (all user-relative)
+  - Filters: two rows, contextual active colours, Chess960 added to Type
+  - Game rows: opponent-only column with initials avatar + color pip (white/blue square), Win/Loss/Draw badges, left accent bar, accuracy bar with `~`, type badge dot-colors, relative dates, inline delete confirmation
+  - Sort toolbar: Date / Accuracy / Result with asc/desc toggle
+  - All W/D/L and accuracy computed from user's perspective via `chesscom_username`
+
+**Bugs fixed this session:**
+- `chesscom_username` never saved on import → opponent column showed user's own name
+- Unicode ♔/♚ pip rendered as bullet dot → replaced with styled colored square
+- Result filter used raw chess notation ("1-0") → now uses user-relative "win"/"loss"/"draw"
+
+**Parked:**
+- My Games accuracy depth (depth-1 `~` values) — acceptable for now, depth-5 plan in open issues
 
 ---
 

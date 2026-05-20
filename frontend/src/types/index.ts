@@ -79,6 +79,7 @@ export interface Game {
   black_elo: number | null;
   result: string | null;
   time_control: string | null;
+  variant: string | null;
   opening: string | null;
   played_at: string | null;
   created_at: string;

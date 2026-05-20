@@ -22,6 +22,15 @@ Import your Chess.com games once. Chesslens runs two analysis layers automatical
 - Phase accuracy — Opening, Middlegame, Endgame
 - Time pressure performance (normal vs under-pressure accuracy)
 
+**My Games** — full game library with:
+- User-relative results (Win / Loss / Draw from your perspective, not piece colour)
+- Opponent-only column with colour indicator (white/black)
+- W/D/L stats strip with stacked bar and win-rate ring
+- Filters: Result · Type (Bullet / Blitz / Rapid / Classical / Chess960) · Period
+- Sort by Date, Accuracy, or Result
+- Inline delete confirmation (no modal)
+- Chess960 game support
+
 Per-game review is also available: full board replay, eval bar, eval graph, move classification, best-move arrows, and a Claude narrative summary.
 
 ---

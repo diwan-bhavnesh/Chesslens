@@ -78,6 +78,7 @@ class GameOut(BaseModel):
     black_elo: Optional[int] = None
     result: Optional[str] = None
     time_control: Optional[str] = None
+    variant: Optional[str] = None
     opening: Optional[str] = None
     played_at: Optional[datetime] = None
     created_at: datetime

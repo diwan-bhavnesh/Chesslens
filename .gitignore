@@ -32,3 +32,6 @@ frontend/dist/
 
 # Claude Code local settings
 .claude/
+
+# Dev prototypes
+frontend/public/prototype-*.html
