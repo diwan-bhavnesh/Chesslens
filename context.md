@@ -184,12 +184,17 @@ _Last updated: 2026-05-20 — Session 11_
 
 ## What's Next — Session 12
 
-- **Game Review page UI review** — board, eval bar, move list, analysis panel
-- **Playing Style & Coaching** — restore clean display when Anthropic credits are topped up
-- **Increase `STOCKFISH_BULK_DEPTH` to 5** — running eval chain model (see open issues + plan `splendid-twirling-walrus.md`). Files: `config.py`, `.env`, `bulk_analysis.py` (`_analyze_single_game`), `Dashboard.tsx` (remove depth-1 disclaimer)
-- Mobile responsiveness (no responsive breakpoints yet)
+**Start here:**
+
+1. **Game Review page UI review** — audit the board, eval bar, move list, and analysis panel for UX/design issues. Same feedback-first approach as Session 11 My Games review.
+2. **Increase `STOCKFISH_BULK_DEPTH` to 5** — plan is fully designed (`splendid-twirling-walrus.md`). Files: `config.py`, `.env`, `bulk_analysis.py` (`_analyze_single_game`), `Dashboard.tsx` (remove depth-1 disclaimer). Removes `~` tilde from My Games accuracy.
+3. **Playing Style & Coaching** — restore clean display once Anthropic credits are topped up (console.anthropic.com).
+
+**Backlog (no session assigned yet):**
+- Mobile responsiveness
 - SaaS deployment (Fly.io + Postgres migration)
-- User-facing onboarding flow (first-time experience not guided)
+- User-facing onboarding flow
+- React Native mobile app
 
 ## Session 11 (2026-05-20) — My Games Page Overhaul
 
