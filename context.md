@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-23 — Session 14_
+_Last updated: 2026-05-23 — Session 15_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -22,6 +22,7 @@ _Last updated: 2026-05-23 — Session 14_
 | 12 | 2026-05-22 | Depth-5 + Game Review UX | Bulk depth 1→5 using running eval chain model (~35s for 1000 games). Eval graph wired into Game Review. Verbal move explanations ("Blunder — dropped 2.3 pawns. Best was Bb6."). Best move in SAN not raw UCI. `eval_before` threaded through MoveEntry. Regression suite: 109/109. |
 | 13 | 2026-05-23 | Game Review gate + bug fixes | "Review" in My Games now triggers depth-15 analysis first and shows "Preparing… Xs" — navigates only when analysis is complete. Already-analyzed games open instantly. Dashboard no longer spins forever when profile stuck in stale `pending` after a reset. `/profile/rebuild` endpoint is now force-safe. |
 | 14 | 2026-05-23 | Accuracy calibration + analysis speed | All-moves depth-5 bulk (replaces sparse critical-position filter). Accuracy 87.7% → 85.4% — confirmed correct for 1608 ELO. Individual game analysis rewritten: chain model + chess.engine (1 search/move vs 3) + depth 12 → ~1s/game (was 15–40s). All games wiped clean slate. 117/117 regression suite. |
+| 15 | 2026-05-23 | Plan check + GitHub push + deployment plan | Confirmed all plan phases (3–4d) already implemented. Pushed Sessions 12–14 work to GitHub (commit a9f2c06). Removed stale root-level regression.md duplicate. Wrote complete production deployment plan (Fly.io + Vercel + Alembic + Postgres). |
 
 ---
 
@@ -95,6 +96,30 @@ _Last updated: 2026-05-23 — Session 14_
 ---
 
 ## Session Decisions Log
+
+### Session 15 (2026-05-23) — Plan Check + GitHub Push + Deployment Plan
+
+**Changes made:**
+
+1. **Confirmed all plan phases complete** — Phases 3–4d (eval_before, EvalGraph, AnalysisPanel CTA, verbal explanations, Dashboard disclaimer) were all already implemented. Plan was fully done.
+
+2. **GitHub push** — All Sessions 12–14 work pushed (commit `a9f2c06`). Stale root-level `regression.md` duplicate removed (commit `eeb5d32`). Canonical is `backend/regression.md`.
+
+3. **Deployment plan drafted** — Full production deployment plan written:
+   - Backend on Fly.io (Docker + Stockfish binary)
+   - Frontend on Vercel (SPA routing via vercel.json)
+   - Database: Fly.io Postgres (psycopg2-binary already in requirements.txt)
+   - Alembic migrations to replace `Base.metadata.create_all()`
+   - AI layer (Claude) hidden via empty ANTHROPIC_API_KEY — re-enables with no code changes
+   - Three open decisions: domain, machine size, region
+
+**Files changed:**
+- `context.md` (this file)
+- `PRD.md` (backlog deployment status)
+
+**DB state:** Fresh (wiped in Session 14). Both servers running.
+
+---
 
 ### Session 14 (2026-05-23) — Accuracy Calibration + Analysis Speed
 
@@ -226,19 +251,19 @@ See previous context entries.
 
 ---
 
-## What's Next — Session 15
+## What's Next — Session 16
 
 **Start here:**
 
-1. **Verify "Preparing..." gate end-to-end** — import games from Chess.com, go to My Games, click Review. With depth-12 chain model the wait should be ~1–2s, not 15–40s.
+1. **Execute deployment plan** — plan drafted and saved. Three open decisions before starting: custom domain vs subdomains, machine size (`performance-1x` vs `shared-cpu-1x`), Fly.io region (Singapore recommended). Plan file: `.claude/plans/frolicking-zooming-pearl.md`.
 
-2. **Collect Game Review feedback** — verbal explanations accuracy, board orientation (auto-flip to user's colour), eval graph behaviour. Gather final UX notes.
+2. **Verify "Preparing..." gate end-to-end** — import games from Chess.com, go to My Games, click Review. With depth-12 chain model the wait should be ~1–2s, not 15–40s.
 
-3. **Playing Style & Coaching** — restore once Anthropic credits topped up.
+3. **Playing Style & Coaching** — restore once Anthropic credits topped up (console.anthropic.com).
 
 **Backlog (no session assigned yet):**
 - Mobile responsiveness
-- SaaS deployment (Fly.io + Postgres migration)
+- SaaS deployment (Fly.io + Postgres migration) — **plan drafted, ready to execute**
 - User-facing onboarding flow
 - React Native mobile app
 

@@ -271,7 +271,7 @@ Cache miss positions only
 | ✅ Done | Home page redesign |
 | ✅ Done | Layer 2 backend pipeline — bulk_analysis (depth-5 all-moves chain model) + FEN cache + DB migrations |
 | 🟡 Medium | Mobile responsiveness (prerequisite for mobile app launch) |
-| 🟡 Medium | SaaS deployment (Fly.io + Postgres migration) |
+| 🟡 Medium | SaaS deployment (Fly.io + Vercel + Postgres + Alembic) — plan drafted, ready to execute |
 | 🟡 Medium | User onboarding flow |
 | 🟢 Low | Hover / micro-animations |
 | 🟢 Low | In-app or email notification when analysis completes |
