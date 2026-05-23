@@ -8,6 +8,7 @@ interface ProfileState {
   fetchProfile: () => Promise<void>;
   pollProfile: () => Promise<void>;
   createProfile: () => Promise<void>;
+  rebuildProfile: () => Promise<void>;
   clearProfile: () => void;
 }
 
@@ -47,6 +48,11 @@ export const useProfileStore = create<ProfileState>((set) => ({
     } catch (err: any) {
       if (err?.response?.status !== 409) throw err;
     }
+  },
+
+  rebuildProfile: async () => {
+    const { data } = await api.post<PlayerProfile>("/profile/rebuild");
+    set({ profile: data });
   },
 
   clearProfile: () => set({ profile: null }),

@@ -56,6 +56,7 @@ export interface MoveEntry {
   moveNumber: number;
   uci: string;
   classification: MoveClassification | null;
+  eval_before: number | null;
   eval_after: number | null;
   best_move: string | null;
   comment: string | null;

@@ -24,27 +24,6 @@ def _move_accuracy(wp_loss: float) -> float:
     return max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * wp_loss) - 3.1668))
 
 
-# ── Critical position filter ──────────────────────────────────────────────────
-
-def _is_critical(board: chess.Board, move: chess.Move) -> bool:
-    """Return True if a position is worth evaluating: capture, check, or move to attacked square."""
-    if board.is_capture(move):
-        return True
-    # Check if the move gives check
-    board.push(move)
-    gives_check = board.is_check()
-    board.pop()
-    if gives_check:
-        return True
-    # Move to a square attacked by opponent's non-pawn pieces (sacrifice-candidate square)
-    opponent = not board.turn
-    for sq in board.attackers(opponent, move.to_square):
-        piece = board.piece_at(sq)
-        if piece and piece.piece_type != chess.PAWN:
-            return True
-    return False
-
-
 # ── FEN evaluation with caching ───────────────────────────────────────────────
 
 def _get_or_cache_eval(
@@ -121,7 +100,7 @@ def _analyze_single_game(
     db: Session,
     seen_hashes: set,
 ) -> None:
-    """Analyze one game at bulk depth. Writes sparse Move rows + upserts GameAnalysis."""
+    """Analyze one game at bulk depth. Evaluates every move via chain model."""
     pgn_game = chess.pgn.read_game(io.StringIO(game.pgn))
     if not pgn_game:
         return
@@ -129,6 +108,7 @@ def _analyze_single_game(
     board = pgn_game.board()
     move_rows: list[dict] = []
     half = 0
+    prev_eval = None  # running eval chain — last known eval_after
 
     for node in pgn_game.mainline():
         move = node.move
@@ -143,14 +123,20 @@ def _analyze_single_game(
 
         san = board.san(move)
         uci = move.uci()
+
         fen_before = board.fen()
-
-        if _is_critical(board, move):
+        # Bootstrap: evaluate fen_before only for the very first move after opening.
+        # All subsequent moves chain from the previous eval_after.
+        eval_before = prev_eval
+        if eval_before is None:
             eval_before = _get_or_cache_eval(fen_before, engine, db, seen_hashes)
-            board.push(move)
-            fen_after = board.fen()
-            eval_after = _get_or_cache_eval(fen_after, engine, db, seen_hashes)
 
+        board.push(move)
+        fen_after = board.fen()
+        eval_after = _get_or_cache_eval(fen_after, engine, db, seen_hashes)
+        prev_eval = eval_after  # advance chain
+
+        if eval_before is not None and eval_after is not None:
             move_rows.append({
                 "move_number": move_number,
                 "color": color,
@@ -160,15 +146,12 @@ def _analyze_single_game(
                 "eval_before": eval_before,
                 "eval_after": eval_after,
             })
-        else:
-            board.push(move)
 
         half += 1
 
     if not move_rows:
         return
 
-    # Write sparse Move rows (critical positions only)
     for m in move_rows:
         db.add(Move(
             game_id=game.id,
@@ -206,7 +189,7 @@ def _analyze_single_game(
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 def bulk_analyze_games(user_id: str, db: Session, profile: PlayerProfile) -> None:
-    """Layer 2: selective depth-1 Stockfish across all unanalyzed games."""
+    """Layer 2: depth-5 Stockfish (all-moves chain model) across all unanalyzed games."""
     from stockfish import Stockfish
 
     # Games already fully analyzed (depth-15 or prior bulk run) — skip these

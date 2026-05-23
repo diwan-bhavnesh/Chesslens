@@ -97,6 +97,13 @@ def trigger_analysis(
     if game.analysis:
         if game.analysis.status == "pending":
             return game.analysis  # already queued, don't duplicate
+        if game.analysis.status == "done":
+            # Skip re-analysis if already at depth-15 (any move has best_move stored)
+            already_deep = db.query(Move).filter(
+                Move.game_id == gid, Move.best_move.isnot(None)
+            ).first() is not None
+            if already_deep:
+                return game.analysis
         db.delete(game.analysis)
         db.commit()
 
@@ -272,16 +279,23 @@ def _move_accuracy(wp_loss: float) -> float:
 
 
 def _compute_accuracy(moves: list[dict], color: str) -> float:
-    color_moves = [m for m in moves if m["color"] == color]
+    # Skip opening (move_number ≤ 5 = first 10 half-moves), consistent with bulk analysis.
+    # Skip moves where either eval is None (Stockfish failed on that position).
+    color_moves = [
+        m for m in moves
+        if m["color"] == color
+        and m.get("move_number", 0) > 5
+        and m.get("eval_before") is not None
+        and m.get("eval_after") is not None
+    ]
     if not color_moves:
         return 0.0
     total = 0.0
     for m in color_moves:
-        eb = m.get("eval_before") or 0.0
-        ea = m.get("eval_after") or 0.0
+        eb = m["eval_before"]
+        ea = m["eval_after"]
         wp_before = _win_prob(eb)
         wp_after  = _win_prob(ea)
-        # Win-probability loss from the moving side's perspective
         if color == "white":
             wp_loss = max(0.0, wp_before - wp_after)
         else:

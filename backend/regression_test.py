@@ -280,6 +280,8 @@ if rp.status_code == 200:
                 check("accuracy_history entry has 'accuracy' key (new format)", "accuracy" in entry, f"keys: {list(entry.keys())}")
                 check("accuracy_history entry has 'color' key (new format)", "color" in entry, f"keys: {list(entry.keys())}")
                 check("accuracy_history entry color is white or black", entry.get("color") in ("white", "black"), f"got: {entry.get('color')}")
+                all_in_range = all(0.0 <= e.get("accuracy", -1) <= 100.0 for e in pd["accuracy_history"])
+                check("accuracy_history values in valid 0–100 range (depth-5 sanity)", all_in_range)
         if pd.get("phase_accuracy") is not None:
             pa = pd["phase_accuracy"]
             check("phase_accuracy has game_count key", "game_count" in pa)
@@ -344,6 +346,125 @@ conn15.close()
 
 # Note: profile was deleted along with games in Section 12 cleanup (expected behaviour).
 # API-level Layer 2 field structure checks are verified in Section 12 (before cleanup).
+
+# ── 16. Depth-15 individual game analysis completeness ───────────────────────
+section("16. Depth-15 individual game analysis")
+
+# Re-import one game (games were cleared after Section 12)
+r16_pgn = requests.post(f"{BASE}/games/import/pgn", headers=hdrs, json={"pgn": SAMPLE_PGN})
+check("Section 16 PGN import → 201", r16_pgn.status_code == 201)
+
+r16_games = requests.get(f"{BASE}/games/", headers=hdrs)
+r16_game_id = r16_games.json()[0]["id"] if r16_games.status_code == 200 and r16_games.json() else None
+check("Section 16 game ID retrieved", r16_game_id is not None)
+
+if r16_game_id:
+    # Trigger depth-15 analysis
+    r16_trigger = requests.post(f"{BASE}/analysis/{r16_game_id}", headers=hdrs)
+    check("POST /analysis/{id} → 202", r16_trigger.status_code == 202, f"got {r16_trigger.status_code}")
+
+    # Poll until done (max 60s)
+    r16_status = "pending"
+    for _ in range(20):
+        if r16_status == "done":
+            break
+        time.sleep(3)
+        r16_game = requests.get(f"{BASE}/games/{r16_game_id}", headers=hdrs)
+        if r16_game.status_code == 200:
+            r16_analysis = r16_game.json().get("analysis") or {}
+            r16_status = r16_analysis.get("status", "pending")
+
+    check("Depth-15 analysis completes (status=done)", r16_status == "done", f"got {r16_status}")
+
+    if r16_status == "done":
+        r16_final = requests.get(f"{BASE}/games/{r16_game_id}", headers=hdrs).json()
+        r16_analysis = r16_final.get("analysis") or {}
+
+        # Accuracy values populated and in valid range
+        acc_w = r16_analysis.get("accuracy_white")
+        acc_b = r16_analysis.get("accuracy_black")
+        check("depth-15 accuracy_white non-null", acc_w is not None)
+        check("depth-15 accuracy_black non-null", acc_b is not None)
+        if acc_w is not None:
+            check("depth-15 accuracy_white in 0–100 range", 0.0 <= acc_w <= 100.0, f"got {acc_w}")
+        if acc_b is not None:
+            check("depth-15 accuracy_black in 0–100 range", 0.0 <= acc_b <= 100.0, f"got {acc_b}")
+
+        # Move quality counts populated (not None)
+        check("blunders_white is integer", isinstance(r16_analysis.get("blunders_white"), int))
+        check("mistakes_white is integer", isinstance(r16_analysis.get("mistakes_white"), int))
+        check("inaccuracies_white is integer", isinstance(r16_analysis.get("inaccuracies_white"), int))
+
+        # Move rows have best_move populated (depth-15 stores best_move for every move)
+        r16_moves = r16_final.get("moves", [])
+        check("depth-15 analysis has move rows", len(r16_moves) > 0, f"got {len(r16_moves)} moves")
+        if r16_moves:
+            has_best_move = any(m.get("best_move") is not None for m in r16_moves)
+            check("at least one move has best_move set (depth-15 signal)", has_best_move)
+
+    # Verify bulk re-run does NOT overwrite depth-15 accuracy values
+    # (guard: bulk skips games where accuracy_white IS NOT NULL)
+    acc_before = requests.get(f"{BASE}/games/{r16_game_id}", headers=hdrs).json().get("analysis", {}).get("accuracy_white")
+    requests.post(f"{BASE}/profile/create", headers=hdrs)  # triggers bulk as side effect
+    time.sleep(5)
+    acc_after = requests.get(f"{BASE}/games/{r16_game_id}", headers=hdrs).json().get("analysis", {}).get("accuracy_white")
+    check("bulk re-run does not overwrite depth-15 accuracy", acc_before == acc_after, f"before={acc_before} after={acc_after}")
+
+# Clean up after Section 16
+requests.delete(f"{BASE}/games/all", headers=hdrs)
+
+# ── 17. All-moves depth-5 bulk accuracy calibration ──────────────────────────
+section("17. All-moves depth-5 bulk accuracy calibration")
+
+# Import one game and build profile to trigger all-moves bulk analysis
+r17_pgn = requests.post(f"{BASE}/games/import/pgn", headers=hdrs, json={"pgn": SAMPLE_PGN})
+check("Section 17 PGN import → 201", r17_pgn.status_code == 201)
+
+r17_create = requests.post(f"{BASE}/profile/create", headers=hdrs)
+check("Section 17 profile create → 202 or 409", r17_create.status_code in (202, 409))
+
+# Poll until Layer 2 bulk analysis completes (max 60s)
+r17_games = requests.get(f"{BASE}/games/", headers=hdrs)
+r17_game_id = r17_games.json()[0]["id"] if r17_games.status_code == 200 and r17_games.json() else None
+check("Section 17 game ID retrieved", r17_game_id is not None)
+
+if r17_game_id:
+    r17_acc_w, r17_acc_b = None, None
+    for _ in range(20):
+        r17_game = requests.get(f"{BASE}/games/{r17_game_id}", headers=hdrs)
+        if r17_game.status_code == 200:
+            r17_analysis = r17_game.json().get("analysis") or {}
+            if r17_analysis.get("accuracy_white") is not None:
+                r17_acc_w = r17_analysis["accuracy_white"]
+                r17_acc_b = r17_analysis.get("accuracy_black")
+                break
+        time.sleep(3)
+
+    # Accuracy values must be in realistic range (40–100%)
+    check("bulk accuracy_white non-null", r17_acc_w is not None)
+    check("bulk accuracy_black non-null", r17_acc_b is not None)
+    if r17_acc_w is not None:
+        check("bulk accuracy_white in 40–100% range", 40.0 <= r17_acc_w <= 100.0, f"got {r17_acc_w}")
+    if r17_acc_b is not None:
+        check("bulk accuracy_black in 40–100% range", 40.0 <= r17_acc_b <= 100.0, f"got {r17_acc_b}")
+
+    # All-moves: bulk analysis should write ≥ 20 Move rows for a 32-move game
+    # (old sparse critical-position filter wrote ~10–15; all-moves writes ~54)
+    # Normalize game_id: DB stores 32-char hex (no dashes), API may return with dashes
+    r17_game_id_hex = uuid.UUID(r17_game_id).hex
+    conn17 = sqlite3.connect(db_path)
+    cur17 = conn17.cursor()
+    cur17.execute(
+        "SELECT COUNT(*) FROM moves WHERE game_id = ? AND best_move IS NULL",
+        (r17_game_id_hex,)
+    )
+    r17_move_count = cur17.fetchone()[0]
+    conn17.close()
+    check("all-moves bulk writes ≥ 20 Move rows per game", r17_move_count >= 20,
+          f"got {r17_move_count} (< 20 suggests sparse filter is still active)")
+
+# Clean up after Section 17
+requests.delete(f"{BASE}/games/all", headers=hdrs)
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 total = passed + failed

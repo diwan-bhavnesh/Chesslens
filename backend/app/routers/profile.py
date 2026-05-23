@@ -45,9 +45,9 @@ class PlayerProfileOut(BaseModel):
         from_attributes = True
 
 
-def _upsert_and_trigger(db: Session, user_id: str, background_tasks: BackgroundTasks) -> PlayerProfile:
+def _upsert_and_trigger(db: Session, user_id: str, background_tasks: BackgroundTasks, force: bool = False) -> PlayerProfile:
     profile = db.query(PlayerProfile).filter(PlayerProfile.user_id == user_id).first()
-    if profile and profile.status in ("pending", "running"):
+    if profile and profile.status in ("pending", "running") and not force:
         raise HTTPException(status_code=409, detail="Profile build already in progress")
     now = datetime.utcnow()
     if profile:
@@ -69,7 +69,7 @@ def create_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return _upsert_and_trigger(db, current_user.id, background_tasks)
+    return _upsert_and_trigger(db, current_user.id, background_tasks, force=False)
 
 
 @router.post("/rebuild", response_model=PlayerProfileOut, status_code=202)
@@ -78,7 +78,8 @@ def rebuild_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return _upsert_and_trigger(db, current_user.id, background_tasks)
+    # force=True: bypass the pending/running guard so an explicit rebuild always proceeds
+    return _upsert_and_trigger(db, current_user.id, background_tasks, force=True)
 
 
 @router.get("/me", response_model=PlayerProfileOut)

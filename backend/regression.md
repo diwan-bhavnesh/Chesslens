@@ -2,7 +2,9 @@
 
 Run with: `cd backend && python3 regression_test.py`
 
-All checks must pass (currently 95/95) before any feature is shipped.
+All checks must pass (currently 117/117) before any feature is shipped.
+
+> Last updated: Session 14 — chain model + depth-12 individual analysis (~1s/game).
 
 ---
 
@@ -116,9 +118,24 @@ Verifies schema columns and cache population after a bulk run.
 
 ---
 
+---
+
+## Section 16 — Depth-15 individual game analysis
+`POST /analysis/{id}` — depth-15 per-game analysis completeness.
+
+**Pass:** Import one game, trigger depth-15 analysis, poll until `status=done`. `accuracy_white` and `accuracy_black` are non-null and in 0–100%. `blunders_white`, `mistakes_white`, `inaccuracies_white` are integers. At least one Move row has `best_move` set (depth-15 signal). Re-running bulk analysis does not overwrite depth-15 accuracy values.
+
+---
+
+## Section 17 — All-moves depth-5 bulk accuracy calibration
+Verifies the all-moves chain model writes sufficient Move rows and produces realistic accuracy.
+
+**Pass:** Import one game, build profile to trigger bulk analysis, poll until `accuracy_white` is set. `accuracy_white` and `accuracy_black` are in 40–100% range. Bulk Move rows (where `best_move IS NULL`) count ≥ 20 for a 32-move game — confirming the all-moves approach (not the old sparse critical-position filter which wrote ~10–15).
+
+---
+
 ## Planned future sections
 
 | Section | Covers | Trigger |
 |---------|--------|---------|
-| 16 | Chess960 variant field in game schema — verify `variant` returned by `GET /games/{id}` after importing a Chess960 PGN | When Chess960 end-to-end import is smoke-tested |
-| 17 | Depth-5 bulk accuracy range — verify `accuracy_white`/`accuracy_black` fall in 40–100% after depth-5 bulk run | When `STOCKFISH_BULK_DEPTH` is raised to 5 |
+| 18 | Chess960 variant field in game schema — verify `variant` returned by `GET /games/{id}` after importing a Chess960 PGN | When Chess960 end-to-end import is smoke-tested |

@@ -1,8 +1,27 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-20 — Session 11_
+_Last updated: 2026-05-23 — Session 14_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
+
+---
+
+## Product Timeline
+
+| Session | Date | Theme | Key Deliverables |
+|---------|------|-------|-----------------|
+| 1–2 | 2026-05-10 | Foundation | Project scaffolded. FastAPI backend + React/Vite frontend. Email/password auth with JWT + refresh tokens. Basic game model. |
+| 3–4 | 2026-05-12–16 | Import + OAuth wiring | Chess.com game import (monthly archive walk). Google OAuth backend wired. SSH + GitHub push. Lichess parked. |
+| 5 | 2026-05-16 | Bug fixes | Game Review screen flickering fixed. Scroll-to-top on move navigation fixed. Monetisation model locked (SaaS subscription). |
+| 6 | 2026-05-17 | Google OAuth live | Real Google credentials set. `AuthCallback.tsx` fixed. Delivery checklist added to CLAUDE.md. |
+| 7 | 2026-05-17 | Architecture + UX redesign | Two-layer profile pipeline designed (Layer 1: instant metadata, Layer 2: Stockfish background). Full dark navy rebrand (Stripe-inspired). Chess Review page with board, eval bar, move list. Navigation: Dashboard + My Games. |
+| 8 | 2026-05-17 | Player Profile — Layer 1 | `PlayerProfile` model. `POST /profile/create`, `POST /profile/rebuild`, `GET /profile/me`. Layer 1: rating history, opening stats, W/D/L, Claude playing style + coaching. Dashboard state machine (empty → build → running → done → failed). |
+| 9 | 2026-05-17–18 | Profile UX + stability | Import progress no longer sticks at 0 (incremental DB flush). Dashboard game count fixed (was capped at 200). Claude errors surfaced via `claude_error` field instead of silent null. Rating history dropdowns redesigned. |
+| 10 | 2026-05-19 | Layer 2 + Dashboard overhaul | Bulk Stockfish pipeline (depth 1, chain of critical positions). Accuracy over time, phase accuracy, time pressure. Dashboard accuracy sections with chess quotes loading state. `AccuracyChart` with As White / As Black / All Games toggle. Polling fixed (no scroll-to-top every 3s). |
+| 11 | 2026-05-20 | My Games overhaul | Full My Games redesign: opponent-only column with avatars, W/D/L badges, accuracy bar, type chips, relative dates. Stats strip with win-rate ring. Filters: result, game type, date range, Chess960. Sort by date / accuracy / result. `chesscom_username` saved on import (opponent column was showing wrong player). |
+| 12 | 2026-05-22 | Depth-5 + Game Review UX | Bulk depth 1→5 using running eval chain model (~35s for 1000 games). Eval graph wired into Game Review. Verbal move explanations ("Blunder — dropped 2.3 pawns. Best was Bb6."). Best move in SAN not raw UCI. `eval_before` threaded through MoveEntry. Regression suite: 109/109. |
+| 13 | 2026-05-23 | Game Review gate + bug fixes | "Review" in My Games now triggers depth-15 analysis first and shows "Preparing… Xs" — navigates only when analysis is complete. Already-analyzed games open instantly. Dashboard no longer spins forever when profile stuck in stale `pending` after a reset. `/profile/rebuild` endpoint is now force-safe. |
+| 14 | 2026-05-23 | Accuracy calibration + analysis speed | All-moves depth-5 bulk (replaces sparse critical-position filter). Accuracy 87.7% → 85.4% — confirmed correct for 1608 ELO. Individual game analysis rewritten: chain model + chess.engine (1 search/move vs 3) + depth 12 → ~1s/game (was 15–40s). All games wiped clean slate. 117/117 regression suite. |
 
 ---
 
@@ -30,9 +49,13 @@ _Last updated: 2026-05-20 — Session 11_
 | `services/profile.py` — Layer 1 computation + Claude synthesis | ✅ Done |
 | `PlayerProfile` fields: `progress`, `games_done`, `games_total`, `game_count_at_last_build`, `win_pct_white`, `win_pct_black`, `total_games`, `claude_error` | ✅ Done |
 | Import progress — incremental flush every 50 games | ✅ Done |
-| `services/bulk_analysis.py` — selective Stockfish pipeline (Layer 2) | ✅ Done |
+| `services/bulk_analysis.py` — all-moves depth-5 chain model (Layer 2) | ✅ Done |
 | `fen_eval_cache` DB table + `FenEvalCache` ORM model | ✅ Done |
-| `STOCKFISH_BULK_DEPTH=1` config | ✅ Done |
+| `STOCKFISH_BULK_DEPTH=5` config | ✅ Done |
+| `STOCKFISH_DEPTH=12` individual analysis (chain model, ~1s/game) | ✅ Done |
+| `/profile/rebuild` bypasses stuck-pending guard (`force=True`) | ✅ Done |
+| `POST /analysis/{game_id}` skips re-analysis if already at depth-12 | ✅ Done |
+| `_compute_accuracy`: opening skip (move > 5) + None eval guard | ✅ Done |
 
 ### Frontend (React + Vite + TypeScript)
 
@@ -45,8 +68,12 @@ _Last updated: 2026-05-20 — Session 11_
 | Token refresh interceptor (Axios) | ✅ Done |
 | Import Games page — date range, game type, time control filters | ✅ Done |
 | Import Games — auto-triggers `POST /profile/create` after success | ✅ Done |
-| Game Review page — Chessboard, EvalBar, MoveList, AnalysisPanel | ✅ Done |
+| Game Review page — Chessboard, EvalBar, MoveList, AnalysisPanel, EvalGraph | ✅ Done |
 | Keyboard navigation, best-move arrows, flip board, coordinates | ✅ Done |
+| Game Review — eval graph wired in below board | ✅ Done |
+| Game Review — verbal move explanations (eval drop in pawns, best move in SAN) | ✅ Done |
+| Game Review — `eval_before` passed through MoveEntry for eval drop computation | ✅ Done |
+| Game Review — auto-trigger depth-15 analysis removed (now triggered from My Games) | ✅ Done |
 | Home page — "Build your Chess Profile" hero | ✅ Done |
 | Dashboard — full state machine (empty / build CTA / pipeline running / profile done / failed) | ✅ Done |
 | Dashboard — Layer 1 sections (rating chart with dual TC dropdowns, openings, style, coaching) | ✅ Done |
@@ -55,10 +82,13 @@ _Last updated: 2026-05-20 — Session 11_
 | Dashboard — "Updated X ago" subtitle + correct game count from profile.total_games | ✅ Done |
 | Dashboard — Analysis-unavailable card (when claude_profile is null, shows error + Rebuild) | ✅ Done |
 | Dashboard — polls during Layer 2 run (layer2Running condition) | ✅ Done |
-| My Games page — game library, stats strip, filters, pagination, per-game Stockfish, Review | ✅ Done |
+| Dashboard — auto-triggers rebuild when profile is stuck in stale `pending` state | ✅ Done |
+| My Games page — game library, stats strip, filters, pagination, per-game Stockfish | ✅ Done |
+| My Games — "Review" button triggers depth-15 analysis first, shows "Preparing… Xs" inline | ✅ Done |
+| My Games — auto-navigates to Game Review only after analysis completes | ✅ Done |
 | Navbar — Dashboard + My Games | ✅ Done |
-| `types/index.ts` — PlayerProfile with all fields including `total_games`, `claude_error` | ✅ Done |
-| `profileStore` — `createProfile()` action | ✅ Done |
+| `types/index.ts` — PlayerProfile with all fields; MoveEntry with `eval_before` | ✅ Done |
+| `profileStore` — `createProfile()` + `rebuildProfile()` actions | ✅ Done |
 | Full dark navy rebrand (Stripe-inspired) | ✅ Done |
 | Vitest test suite — 17 passing utility tests | ✅ Done |
 
@@ -66,109 +96,123 @@ _Last updated: 2026-05-20 — Session 11_
 
 ## Session Decisions Log
 
+### Session 14 (2026-05-23) — Accuracy Calibration + Analysis Speed
+
+**Changes made:**
+
+1. **Bulk analysis: all-moves depth-5 (replaces critical-position filter)**
+   - `services/bulk_analysis.py`: removed `_is_critical` filter — every post-opening move is now evaluated via chain model at depth-5
+   - `reset_bulk_analysis.py`: updated to also delete stale sparse Move rows before reset (prevents duplicate rows on re-run)
+   - All games wiped and re-imported fresh for clean test state
+   - Accuracy result: 87.7% → 85.4% — confirmed correct for 1608 ELO (matches depth-12 individual analysis)
+
+2. **Individual game analysis: chain model + chess.engine + depth 12**
+   - `services/stockfish.py`: rewritten to use `chess.engine.SimpleEngine` (python-chess) — one search gives both eval AND best move, halving searches vs old `get_evaluation()` + `get_best_move()` separately
+   - Chain model applied: `eval_before` = previous move's `eval_after`, eliminates bootstrap searches after the first move
+   - Net: ~1 search/move vs old 3 searches/move
+   - `.env`: `STOCKFISH_DEPTH=12` (was 15)
+   - Result: ~1s/game (was 15–40s)
+
+3. **`_compute_accuracy` fix in `routers/analysis.py`**
+   - Added opening skip: `move_number > 5` (first 10 half-moves excluded, consistent with bulk)
+   - Fixed None guard: skip moves where `eval_before` or `eval_after` is `None` instead of silently coercing to `0.0`
+
+4. **Regression suite**: 117/117 (added Section 17: all-moves bulk accuracy calibration)
+
+**Files changed:**
+- `backend/app/services/bulk_analysis.py`
+- `backend/app/services/stockfish.py`
+- `backend/app/routers/analysis.py`
+- `backend/.env`
+- `backend/reset_bulk_analysis.py`
+- `backend/regression_test.py`
+- `backend/regression.md`
+
+**DB state at end of session:**
+- Fresh DB (wiped entirely for clean test slate)
+- Both servers running: backend :8000, frontend :5173
+- No games imported yet — ready for end-to-end test
+
+---
+
+### Session 13 (2026-05-23) — Bug Fixes + Game Review UX Gate
+
+**Bugs fixed:**
+
+1. **Dashboard infinite spinner after DB reset**: Reset script left `profile.status = 'pending'` but backend's `_upsert_and_trigger` refused new builds when status was `pending`/`running`. Fixed:
+   - `routers/profile.py`: `/rebuild` endpoint passes `force=True` to bypass guard
+   - `profileStore.ts`: added `rebuildProfile()` calling `POST /profile/rebuild`
+   - `Dashboard.tsx`: `useEffect` auto-triggers `rebuildProfile()` once when profile is stuck in `pending` (guarded by `staleRebuildRef`)
+   - `reset_bulk_analysis.py`: now also clears `games_done`/`games_total` to avoid stale "183/183" progress bar
+
+2. **Game Review opening before analysis completes**: "Review" button was a `<Link>` that navigated immediately. Fixed with blocking analysis gate:
+   - `routers/analysis.py`: `POST /analysis/{game_id}` returns existing analysis immediately if already at depth-15 (any `Move.best_move IS NOT NULL`) — skips wasteful re-run
+   - `MyGames.tsx`: Review button calls `handleReview(id)` instead of navigating — triggers analysis, shows "Preparing… Xs" inline spinner with elapsed timer, navigates only when `analysis.status === "done"`
+   - Uses `reviewReadyRef` to prevent useEffect firing with stale `done` status from bulk data before refresh
+
+**Files changed:**
+- `backend/app/routers/profile.py`
+- `backend/app/routers/analysis.py`
+- `backend/reset_bulk_analysis.py`
+- `frontend/src/store/profileStore.ts`
+- `frontend/src/pages/Dashboard.tsx`
+- `frontend/src/pages/MyGames.tsx`
+
+**DB state at end of session:**
+- Reset was run: cleared `fen_eval_cache`, reset bulk-only `game_analyses` to pending, reset `player_profiles`
+- Profile rebuild triggered (depth-5 bulk analysis), likely completed
+- 112/115 games need depth-15 analysis (most old Move rows are from orphaned game IDs)
+- 3 games have current depth-15 Move rows
+
+**Open issues from this session:**
+- "Preparing..." flow needs end-to-end verification — user couldn't confirm because most games tested were already analyzed. Needs a fresh test on un-analyzed game.
+
+---
+
+### Session 12 (2026-05-22) — Depth-5 Bulk + Game Review UX Sprint
+
+**Built (all from plan `frolicking-zooming-pearl.md`):**
+
+1. **Backend: Depth-5 bulk with chain model** — `STOCKFISH_BULK_DEPTH` 1→5. `_analyze_single_game` uses running eval chain (1 Stockfish call/critical position instead of 2). Bootstrap with 1 eval_before for first critical position. ~35s for 1000 games (was ~70s naive depth-5). FEN eval cache still used.
+
+2. **Backend: Depth-15 individual guard** — `bulk_analyze_games` already skips games with `accuracy_white IS NOT NULL`. No changes needed.
+
+3. **Frontend: MoveEntry extended** — `eval_before: number | null` added to type and passed through `useChessGame.ts`.
+
+4. **Frontend: Game Review UX** —
+   - `EvalGraph` wired in below the board (above nav controls)
+   - `hasDeepAnalysis` = `currentGame.moves.some(m => m.best_move !== null)` — detects depth-15 vs bulk
+   - Auto-trigger depth-15 when game opens without deep analysis (removed later — now gated in My Games)
+   - Verbal explanations per move: "Blunder — dropped 2.3 pawns. Best was Bb6."
+   - Best move displayed in SAN not raw UCI
+   - `eval_before` → eval drop computation (white: before−after, black: after−before)
+
+5. **Frontend: Dashboard** — AccuracyChart subtitle updated to depth-5 language
+
+6. **Backend: reset_bulk_analysis.py** — one-time migration script created
+
+7. **Regression suite** — Section 16 (14 checks): depth-15 analysis completeness. Total: 109/109 passing.
+
+**Architecture decision: Game Review UX gate**
+Original plan had auto-trigger + "Run Deep Analysis" CTA. User decided: block navigation from My Games until depth-15 analysis is complete. Already-analyzed games navigate immediately. New games show "Preparing… Xs" and navigate when done.
+
+---
+
+### Session 11 (2026-05-20) — My Games Page Overhaul
+
+**Built:** Full My Games redesign + Chess960 support. (See previous context for details.)
+
+---
+
 ### Session 10 (2026-05-19) — Layer 2 Build + Dashboard UI Overhaul
 
-**Built:** Full Layer 2 pipeline end-to-end + full Dashboard UI refresh.
-
-**Layer 2 backend:**
-- `services/bulk_analysis.py` — opening filter (skip first 10 half-moves) → critical position filter (captures, checks, moves to attacked squares) → FEN cache lookup → Stockfish depth 1 NNUE → sparse Move rows written → GameAnalysis upserted per game
-- `fen_eval_cache` DB table + `FenEvalCache` ORM model — shared FEN eval cache across all users
-- `STOCKFISH_BULK_DEPTH=1` in config.py and .env
-- `PlayerProfile` model + DB: added `games_total`, `games_done`, `progress`, `game_count_at_last_build`, `total_wins`, `total_draws`, `total_losses` columns
-- `services/profile.py` — `compute_accuracy_history` now filters to user's own color per game (was incorrectly including opponent's accuracy); returns `{date, accuracy, color}` format
-- `routers/profile.py` — `PlayerProfileOut` schema updated with all new fields
-- Regression suite: 92/92 passing.
-
-**Dashboard UI:**
-- Two-column layout: Opening Repertoire left | Phase Accuracy + Time Pressure right (falls back to full-width if Layer 2 not done)
-- Stats strip redesigned: flex layout with W/D/L stacked bar (proportional green/grey/red + colour-coded counts)
-- Rating History dropdowns: counts removed from labels
-- `RatingChart` wrapped in `React.memo` with length-based comparator (reference equality always fails on JSON deserialisation)
-- Polling fix: `pollProfile()` added to profileStore — silent fetch (no `isLoading: true`). Poll interval uses `pollProfile` instead of `fetchProfile` to eliminate scroll-to-top and full re-render every 3 seconds
-- `AccuracyChart` rewritten: As White / As Black / All Games toggle; 15-game rolling average; Y-axis auto-scales; disclaimer subtitle on SectionCard
-- `AccuracyHistoryPoint` type updated: `{date, accuracy, color}` (was `{date, accuracy_white, accuracy_black}`)
-- Stale format guard: if existing profile has old accuracy format, "Update Profile" button appears automatically
-
-**Files changed:** `config.py`, `.env`, `models/game.py`, `services/bulk_analysis.py` (new), `services/profile.py`, `routers/profile.py`, `Dashboard.tsx`, `profileStore.ts`, `types/index.ts`, `regression_test.py`
+**Built:** Full Layer 2 pipeline end-to-end + full Dashboard UI refresh. (See previous context for details.)
 
 ---
 
-### Session 9 (2026-05-17–18) — Profile UX Fixes + Layer 2 Planning
+### Sessions 1–9
 
-**Problems solved:**
-- Import progress stuck at 0 during long imports — fixed with incremental DB flush every 50 games
-- Dashboard showed wrong game count (capped at 200 due to frontend limit) — fixed with `total_games` column on profile
-- Claude synthesis silently failing — `synthesize_player_profile()` prompt rewritten to use Layer 1 data only (no accuracy/Stockfish references); errors surfaced via `claude_error` field
-- Rating history filter too coarse — replaced single pill row with two cascading dropdowns (Game Type → Time Control) using human-readable TC notation
-
-**Decisions:**
-- Layer 2 pipeline design confirmed: pure-Python opening depth cutoff (skip first 10 half-moves) instead of Polyglot — no file dependency
-- `regression.md` created as living test catalogue; CLAUDE.md updated to require test additions in parallel with each module
-- `claude_error` field added to profile — surfaces Claude API failures visibly instead of silent null
-
-**Files changed:** `Dashboard.tsx` (RatingChart, analysis-unavailable card, game count), `types/index.ts`, `models/game.py`, `services/profile.py`, `services/claude.py`, `routers/profile.py`, `regression_test.py` (Section 12), `regression.md` (new), `CLAUDE.md`
-
----
-
-### Session 8 (2026-05-17) — Player Profile Engine — Layer 1
-
-**Built:** Full Layer 1 pipeline end-to-end. `POST /profile/create`, `POST /profile/rebuild`, `GET /profile/me`. Layer 1 computes rating history, opening stats, win %, and calls Claude for style + coaching. Dashboard polling wired. Profile state machine complete.
-
-**Regression suite:** Extended to 75 checks across 14 sections. Section 12 (Player Profile) added.
-
----
-
-### Session 7 (2026-05-17) — UX Redesign + Frontend Prototype Built
-
-**Architecture decisions locked:**
-
-1. **Two-layer profile pipeline:**
-   - Layer 1 (instant, seconds): PGN metadata → rating history, opening stats, W/D/L, White/Black win %, Claude playing style + coaching. No Stockfish.
-   - Layer 2 (background, <60s for 10,000 games): Selective Stockfish depth 1 NNUE → accuracy over time, phase accuracy, time pressure, blunder patterns.
-
-2. **Scalable analysis engine (Layer 2):**
-   - Step 1: Opening depth cutoff — skip first 10 half-moves (no Polyglot file)
-   - Step 2: Critical position detection (pure Python) — keep captures, checks, moves to attacked squares by non-pawn pieces
-   - Step 3: FEN deduplication + global eval cache (`fen_eval_cache` table, shared across ALL users)
-   - Step 4: Stockfish depth 1 NNUE, single engine reused across games — ~15–30s cold, ~1–3s warm
-
-3. **Performance targets (hard constraints):**
-   - MVP: < 60s for 10,000 games
-   - Post-MVP: < 30s (replace Stockfish with batch neural net, e.g. Maia-style)
-
-4. **Two Stockfish depths:**
-   - `STOCKFISH_BULK_DEPTH=1` — bulk profile (NNUE only, no tree search)
-   - `STOCKFISH_DEPTH=15` — individual game review (unchanged)
-
-5. **Navigation:** Dashboard + My Games. Import hidden from nav. My Games hosts game library + per-game Stockfish. Dashboard hosts the profile only.
-
-6. **"Update Profile" button rule:** Appears ONLY when `games.length > profile.game_count_at_last_build`.
-
-7. **Chess quotes loading state:** While Layer 2 computes, accuracy sections display rotating chess quotes (12 quotes, cycle every 8s).
-
----
-
-### Session 6 (2026-05-17) — Google OAuth Fixed
-
-- Google OAuth credentials set (real credentials in `backend/.env`)
-- `AuthCallback.tsx` TypeScript error fixed
-- Delivery checklist added to CLAUDE.md
-
----
-
-### Session 5 (2026-05-16) — Bug Fixes
-
-- BUG-A (Game Review screen flickering) — fixed
-- BUG-B (Game Review scroll-to-top) — fixed
-- Monetisation locked: SaaS subscription model
-
----
-
-### Sessions 3–4 (2026-05-12–16)
-
-- Lichess removed from MVP (parked, code remains)
-- Google OAuth backend wired
-- SSH key set up, project pushed to GitHub
+See previous context entries.
 
 ---
 
@@ -176,19 +220,21 @@ _Last updated: 2026-05-20 — Session 11_
 
 | Priority | Issue | Notes |
 |----------|-------|-------|
-| 🟡 Medium | Anthropic API credits depleted | User must top up at console.anthropic.com |
-| 🟡 Medium | My Games accuracy shows depth-1 values (`~`) | `STOCKFISH_BULK_DEPTH=1` inflates accuracy to 85–95% range (realistic is 65–85%). Plan decided (Session 11): increase to depth 5 using the running eval chain model. See plan file `splendid-twirling-walrus.md`. Deferred to a separate session. Game Review page is unaffected — uses `STOCKFISH_DEPTH=15`. |
+| 🔴 High | "Preparing..." flow — needs manual verification | DB is fresh. Import games, click Review on any game. Expected: brief "Preparing… Xs" (~1–2s with new depth-12 engine), then Game Review with full move classifications and verbal explanations. |
+| 🟡 Medium | Anthropic API credits | Playing Style + Coaching sections blank until user tops up at console.anthropic.com |
 | 🟢 Low | `bcrypt` pinned to 3.2.2 | Cannot upgrade — passlib 1.7.4 incompatible with bcrypt ≥ 4.0 |
 
 ---
 
-## What's Next — Session 12
+## What's Next — Session 15
 
 **Start here:**
 
-1. **Game Review page UI review** — audit the board, eval bar, move list, and analysis panel for UX/design issues. Same feedback-first approach as Session 11 My Games review.
-2. **Increase `STOCKFISH_BULK_DEPTH` to 5** — plan is fully designed (`splendid-twirling-walrus.md`). Files: `config.py`, `.env`, `bulk_analysis.py` (`_analyze_single_game`), `Dashboard.tsx` (remove depth-1 disclaimer). Removes `~` tilde from My Games accuracy.
-3. **Playing Style & Coaching** — restore clean display once Anthropic credits are topped up (console.anthropic.com).
+1. **Verify "Preparing..." gate end-to-end** — import games from Chess.com, go to My Games, click Review. With depth-12 chain model the wait should be ~1–2s, not 15–40s.
+
+2. **Collect Game Review feedback** — verbal explanations accuracy, board orientation (auto-flip to user's colour), eval graph behaviour. Gather final UX notes.
+
+3. **Playing Style & Coaching** — restore once Anthropic credits topped up.
 
 **Backlog (no session assigned yet):**
 - Mobile responsiveness
@@ -196,99 +242,29 @@ _Last updated: 2026-05-20 — Session 11_
 - User-facing onboarding flow
 - React Native mobile app
 
-## Session 11 (2026-05-20) — My Games Page Overhaul
+---
 
-**Built:** Full My Games redesign + Chess960 support.
+## Analysis Architecture — Two Depths
 
-**Backend:**
-- `game.py`: added `variant = Column(String, nullable=True)` column for Chess960 detection
-- `chesscom.py`: `normalize_chesscom_game()` now captures `"variant": raw.get("rules", "chess")`
-- `schemas/game.py`: `GameOut` exposes `variant: Optional[str] = None`
-- `routers/games.py`: import route now saves `chesscom_username` to the user record on every Chess.com import
-- SQLite migration: `ALTER TABLE games ADD COLUMN variant VARCHAR`
-- DB backfill: `chesscom_username = 'bhavnesh123'` set for existing account
+| Depth | Where used | Trigger | What it stores |
+|-------|-----------|---------|----------------|
+| `STOCKFISH_BULK_DEPTH=5` | Dashboard accuracy, My Games accuracy | Auto after profile build | `accuracy_white/black`, aggregate blunder/mistake/inaccuracy counts |
+| `STOCKFISH_DEPTH=12` | Game Review | Clicking "Review" in My Games (if not already done) | Per-move `eval_before`, `eval_after`, `best_move`, `classification` |
 
-**Frontend:**
-- `types/index.ts`: `Game` interface gains `variant: string | null`
-- `filterStore.ts`: removed `platform` state; result values changed to `"win"/"loss"/"draw"`; added `sortBy` / `sortDir`
-- `MyGames.tsx`: full rewrite —
-  - Stats strip: Total | W/D/L stacked bar | SVG win-rate ring (all user-relative)
-  - Filters: two rows, contextual active colours, Chess960 added to Type
-  - Game rows: opponent-only column with initials avatar + color pip (white/blue square), Win/Loss/Draw badges, left accent bar, accuracy bar with `~`, type badge dot-colors, relative dates, inline delete confirmation
-  - Sort toolbar: Date / Accuracy / Result with asc/desc toggle
-  - All W/D/L and accuracy computed from user's perspective via `chesscom_username`
-
-**Bugs fixed this session:**
-- `chesscom_username` never saved on import → opponent column showed user's own name
-- Unicode ♔/♚ pip rendered as bullet dot → replaced with styled colored square
-- Result filter used raw chess notation ("1-0") → now uses user-relative "win"/"loss"/"draw"
-
-**Parked:**
-- My Games accuracy depth (depth-1 `~` values) — acceptable for now, depth-5 plan in open issues
+**Key invariant:** Bulk analysis never overwrites a game already at depth-15 (`accuracy_white IS NOT NULL` guard). Depth-15 endpoint skips re-analysis if `Move.best_move IS NOT NULL` already exists.
 
 ---
 
-## Layer 2 Build Plan (Reference)
+## Critical Implementation Invariants
 
-### Goal
-Bulk accuracy analysis that runs automatically after Layer 1. No user action required. Produces: Accuracy over time, Phase accuracy (Opening / Middlegame / Endgame), Time pressure (normal vs under pressure).
-
-### Pipeline (inside `services/bulk_analysis.py`)
-
-For each unanalyzed game:
-1. **Opening filter** — skip first 10 half-moves (pure Python, zero file dependency)
-2. **Critical position filter** — from remaining moves, keep: captures, checks, moves to attacked squares by non-pawn pieces. ~60% reduction.
-3. **FEN cache lookup** — MD5-hash each critical FEN, check `fen_eval_cache`. If found, use cached eval, zero Stockfish call.
-4. **Stockfish depth 1 NNUE** — only for uncached FENs. ~2–5ms per position.
-5. **Store Move rows** (critical positions only) + upsert `GameAnalysis` with per-game accuracy.
-
-After all games: call `compute_accuracy_history()`, `compute_phase_accuracy()`, `compute_time_pressure()` → save to profile.
-
-### Files to create / change
-
-| File | Change |
-|------|--------|
-| DB migration | `CREATE TABLE fen_eval_cache (fen_hash TEXT PK, eval_cp INT, depth INT, created_at TIMESTAMP)` |
-| `backend/app/models/game.py` | Add `FenEvalCache` ORM model |
-| `backend/app/config.py` | Add `STOCKFISH_BULK_DEPTH: int = 1` |
-| `backend/.env` | Add `STOCKFISH_BULK_DEPTH=1` |
-| `backend/app/services/bulk_analysis.py` | New file — full pipeline (see below) |
-| `backend/app/services/profile.py` | After Layer 1 save, call `bulk_analyze_games()` then accuracy compute functions |
-| `frontend/src/pages/Dashboard.tsx` | Extend polling: `const shouldPoll = isPipelineActive \|\| layer2Running` |
-
-### Key functions in `bulk_analysis.py`
-
-- `_is_critical(board, move) -> bool` — captures + checks + sacrifice-candidate squares
-- `_get_or_cache_eval(fen, engine, db) -> float | None` — cache lookup then Stockfish
-- `_accuracy_from_move_dicts(moves, color) -> float | None` — win-prob formula on dicts
-- `bulk_analyze_games(user_id, db, profile)` — orchestrator: finds unanalyzed games, creates one Stockfish engine, loops, flushes every 10 games, skips errors silently
-
-### Regression tests to add (Section 15)
-
-- Profile eventually has `accuracy_history` as non-empty list
-- `phase_accuracy` not null, has opening/middlegame/endgame keys
-- `time_pressure` not null, has normal_accuracy/pressure_accuracy keys
-- `games_total` set during run (progress tracking)
-- `fen_eval_cache` table exists with rows after run
-- Games already at depth 15 not overwritten by bulk pipeline
-
-### Performance target
-
-< 60s for 10,000 games cold. Scales with FEN cache warmth.
-
----
-
-## Analysis Architecture — Token Rules
-
-**Rule: Token usage must stay flat regardless of game count (even 100k games).**
-
-- All data extraction is programmatic (Python, zero Claude calls per game)
-- Claude receives one compact structured summary per user per rebuild (~3KB)
-- No raw move text, no FEN strings, no per-game API calls to Claude
-
-Current Claude calls:
-- `generate_game_summary()` — per-game summary (Haiku, ~800 tokens — unchanged)
-- `synthesize_player_profile()` — Layer 1 data → narrative (Sonnet, ~1500 tokens)
+- UUIDs stored as 32-character hex strings (`uuid.UUID(...).hex`) — never with dashes
+- Passwords: SHA-256 pre-hash → bcrypt 3.2.2 — do not change this chain
+- bcrypt pinned to 3.2.2 — do not upgrade
+- Google OAuth credentials are real, stored in `backend/.env` — never overwrite with placeholders
+- SQLite-safe SQL only — no Postgres-specific syntax (future migration target)
+- `max_games=0` on Chess.com import means fetch all available games
+- `/profile/rebuild` always succeeds (force=True) — safe to call even if stuck in pending/running
+- `POST /analysis/{game_id}` is idempotent for depth-15 games — returns existing analysis if already deep
 
 ---
 
@@ -302,17 +278,6 @@ Hard rules (do not break):
 - **Card bg:** `--navy-card: #132840` with `box-shadow: 0 1px 3px rgba(0,0,0,0.4)`
 - **Dashboard:** `maxWidth: 960`, `padding: 1.5rem 2rem`
 - **My Games:** `maxWidth: 1280`, `padding: 1.5rem 2rem`
-
----
-
-## Critical Implementation Invariants
-
-- UUIDs stored as 32-character hex strings (`uuid.UUID(...).hex`) — never with dashes
-- Passwords: SHA-256 pre-hash → bcrypt 3.2.2 — do not change this chain
-- bcrypt pinned to 3.2.2 — do not upgrade
-- Google OAuth credentials are real, stored in `backend/.env` — never overwrite with placeholders
-- SQLite-safe SQL only — no Postgres-specific syntax (future migration target)
-- `max_games=0` on Chess.com import means fetch all available games
 
 ---
 

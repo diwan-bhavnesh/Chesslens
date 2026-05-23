@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useGameStore } from "../store/gameStore";
 import { useFilterStore } from "../store/filterStore";
 import { useAuthStore } from "../store/authStore";
@@ -369,6 +369,19 @@ function Spinner() {
   );
 }
 
+function MiniSpinner() {
+  return (
+    <div style={{
+      width: 10, height: 10, flexShrink: 0,
+      border: "1.5px solid rgba(143,163,184,0.25)",
+      borderTopColor: "#8FA3B8",
+      borderRadius: "50%",
+      display: "inline-block",
+      animation: "spin 0.75s linear infinite",
+    }} />
+  );
+}
+
 // ── Pagination ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25;
@@ -401,11 +414,19 @@ function Pagination({ page, totalPages, onPage }: {
 
 const COL = "200px 80px 105px 1fr 100px 120px 68px 40px";
 
-function GameRow({ game, username, onDelete, onAnalyze }: {
+function GameRow({ game, username, onDelete, onAnalyze, onReview, isAwaitingReview }: {
   game: Game; username: string | null;
   onDelete: (id: string) => void; onAnalyze: (id: string) => void;
+  onReview: (id: string) => void; isAwaitingReview: boolean;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!isAwaitingReview) { setElapsed(0); return; }
+    const t = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [isAwaitingReview]);
   const outcome = game.result != null ? userOutcome(game, username) : null;
   const userIsWhite = game.white_player?.toLowerCase() === username?.toLowerCase();
   const opponent = userIsWhite ? game.black_player : game.white_player;
@@ -489,15 +510,23 @@ function GameRow({ game, username, onDelete, onAnalyze }: {
 
         {/* Actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {isDone ? (
-            <Link to={`/game/${game.id}`} style={{ textDecoration: "none" }}>
-              <button style={{
+          {isDone && isAwaitingReview ? (
+            <span style={{
+              display: "flex", alignItems: "center", gap: "0.375rem",
+              fontSize: "0.6875rem", color: "#8FA3B8", whiteSpace: "nowrap",
+            }}>
+              <MiniSpinner /> Preparing… {elapsed}s
+            </span>
+          ) : isDone ? (
+            <button
+              onClick={() => onReview(game.id)}
+              style={{
                 padding: "4px 10px", borderRadius: 5, fontSize: "0.6875rem", fontWeight: 500,
                 background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
                 color: "#8FA3B8", cursor: "pointer", whiteSpace: "nowrap",
                 fontFamily: "'Cabinet Grotesk', sans-serif",
-              }}>Review</button>
-            </Link>
+              }}
+            >Review</button>
           ) : !isPending ? (
             <button onClick={() => onAnalyze(game.id)} style={{
               padding: "4px 10px", borderRadius: 5, fontSize: "0.6875rem", fontWeight: 500,
@@ -542,9 +571,10 @@ function GameRow({ game, username, onDelete, onAnalyze }: {
   );
 }
 
-function GameTable({ games, username, onDelete, onAnalyze }: {
+function GameTable({ games, username, onDelete, onAnalyze, onReview, awaitingReviewId }: {
   games: Game[]; username: string | null;
   onDelete: (id: string) => void; onAnalyze: (id: string) => void;
+  onReview: (id: string) => void; awaitingReviewId: string | null;
 }) {
   if (games.length === 0) return null;
   const hdrStyle: React.CSSProperties = {
@@ -559,7 +589,15 @@ function GameTable({ games, username, onDelete, onAnalyze }: {
         ))}
       </div>
       {games.map(game => (
-        <GameRow key={game.id} game={game} username={username} onDelete={onDelete} onAnalyze={onAnalyze} />
+        <GameRow
+          key={game.id}
+          game={game}
+          username={username}
+          onDelete={onDelete}
+          onAnalyze={onAnalyze}
+          onReview={onReview}
+          isAwaitingReview={awaitingReviewId === game.id}
+        />
       ))}
     </div>
   );
@@ -571,9 +609,12 @@ export function MyGames() {
   const { games, isLoading, fetchGames, deleteGame, triggerAnalysis, refreshGameInList } = useGameStore();
   const { result, gameType, dateKey, sortBy, sortDir, clearFilters } = useFilterStore();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const username = user?.chesscom_username ?? null;
 
   const [page, setPage] = useState(0);
+  const [awaitingReviewId, setAwaitingReviewId] = useState<string | null>(null);
+  const reviewReadyRef = useRef(false); // true only after trigger+refresh complete
   const gamePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingIdsRef = useRef<string[]>([]);
 
@@ -583,6 +624,30 @@ export function MyGames() {
     await triggerAnalysis(id);
     refreshGameInList(id);
   }, [triggerAnalysis, refreshGameInList]);
+
+  const handleReview = useCallback(async (id: string) => {
+    reviewReadyRef.current = false;
+    setAwaitingReviewId(id);
+    await triggerAnalysis(id);
+    await refreshGameInList(id);
+    reviewReadyRef.current = true;
+    // Direct store read (Zustand sync): if backend returned "done" immediately, navigate now
+    const game = useGameStore.getState().games.find(g => g.id === id);
+    if (game?.analysis?.status === "done") {
+      navigate(`/game/${id}`);
+      setAwaitingReviewId(null);
+    }
+  }, [triggerAnalysis, refreshGameInList, navigate]);
+
+  // Navigate when polling detects the awaited analysis is done
+  useEffect(() => {
+    if (!awaitingReviewId || !reviewReadyRef.current) return;
+    const game = games.find(g => g.id === awaitingReviewId);
+    if (game?.analysis?.status === "done") {
+      navigate(`/game/${awaitingReviewId}`);
+      setAwaitingReviewId(null);
+    }
+  }, [games, awaitingReviewId, navigate]);
 
   const hasPendingGame = games.some(g => g.analysis?.status === "pending");
   pendingIdsRef.current = games.filter(g => g.analysis?.status === "pending").map(g => g.id);
@@ -705,7 +770,7 @@ export function MyGames() {
           ) : (
             <>
               <SortToolbar total={filtered.length} page={page} pageSize={PAGE_SIZE} />
-              <GameTable games={paginated} username={username} onDelete={deleteGame} onAnalyze={handleAnalyze} />
+              <GameTable games={paginated} username={username} onDelete={deleteGame} onAnalyze={handleAnalyze} onReview={handleReview} awaitingReviewId={awaitingReviewId} />
               <Pagination page={page} totalPages={totalPages} onPage={setPage} />
             </>
           )}

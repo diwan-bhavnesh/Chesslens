@@ -30,6 +30,7 @@ export function useChessGame(pgn: string, analyzedMoves: Move[]) {
         moveNumber: Math.floor(i / 2) + 1,
         uci: vm.from + vm.to + (vm.promotion ?? ""),
         classification: null,
+        eval_before: null,
         eval_after: null,
         best_move: null,
         comment: null,
@@ -47,6 +48,7 @@ export function useChessGame(pgn: string, analyzedMoves: Move[]) {
       return {
         ...entry,
         classification: a.classification,
+        eval_before: a.eval_before,
         eval_after: a.eval_after,
         best_move: a.best_move,
         comment: a.comment,

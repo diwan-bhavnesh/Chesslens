@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     STOCKFISH_PATH: str = "/usr/local/bin/stockfish"
     STOCKFISH_DEPTH: int = 18
-    STOCKFISH_BULK_DEPTH: int = 1
+    STOCKFISH_BULK_DEPTH: int = 5
 
     CHESSCOM_BASE_URL: str = "https://api.chess.com/pub"
 

@@ -1,11 +1,15 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
+import { Chess } from "chess.js";
 import { useGameStore } from "../store/gameStore";
+import { useAuthStore } from "../store/authStore";
 import { useChessGame } from "../hooks/useChessGame";
+import type { GameAnalysis } from "../types";
 import { ChessBoard } from "../components/chess/ChessBoard";
 import { MoveList } from "../components/chess/MoveList";
 import { AnalysisPanel } from "../components/chess/AnalysisPanel";
 import { EvalBar } from "../components/chess/EvalBar";
+import { EvalGraph } from "../components/chess/EvalGraph";
 
 type AnalysisState = "none" | "running" | "done" | "failed";
 
@@ -14,13 +18,18 @@ const calcBoardSize = () => Math.max(300, Math.min(window.innerHeight - 220, 560
 export function GameReview() {
   const { id } = useParams<{ id: string }>();
   const { currentGame, fetchGame, triggerAnalysis } = useGameStore();
+  const { user } = useAuthStore();
   const [localLoading, setLocalLoading] = useState(true);
 
   const [orientation, setOrientation] = useState<"white" | "black">("white");
+  const orientationSetRef = useRef(false);
   const [boardSize, setBoardSize] = useState(calcBoardSize);
+  const [autoAnalyzing, setAutoAnalyzing] = useState(false);
+  const [cachedAnalysis, setCachedAnalysis] = useState<GameAnalysis | null>(null);
 
   useEffect(() => {
     if (!id) return;
+    orientationSetRef.current = false;
     setLocalLoading(true);
     fetchGame(id).finally(() => setLocalLoading(false));
   }, [id]);
@@ -30,6 +39,16 @@ export function GameReview() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  // Auto-set orientation once per game: show the board from the user's side
+  useEffect(() => {
+    if (!currentGame || orientationSetRef.current) return;
+    const username = user?.chesscom_username?.toLowerCase();
+    if (username && currentGame.black_player?.toLowerCase() === username) {
+      setOrientation("black");
+    }
+    orientationSetRef.current = true;
+  }, [currentGame?.id]);
 
   const { entries, currentFen, currentEntry, currentMoveIndex, goToMove, goForward, goBack, goToStart, goToEnd } =
     useChessGame(currentGame?.pgn ?? "", currentGame?.moves ?? []);
@@ -59,11 +78,42 @@ export function GameReview() {
     return () => clearInterval(t);
   }, [analysisState, id]);
 
+  const hasDeepAnalysis = useMemo(
+    () => (currentGame?.moves ?? []).some(m => m.best_move !== null),
+    [currentGame?.moves],
+  );
+
+  // Auto-trigger depth-15 silently when only bulk data exists — fires once per game open
+  useEffect(() => {
+    if (analysisState !== "done" || hasDeepAnalysis || autoAnalyzing || !id || !currentGame?.analysis) return;
+    setCachedAnalysis(currentGame.analysis);
+    setAutoAnalyzing(true);
+    triggerAnalysis(id)
+      .then(() => fetchGame(id))  // refresh status so polling interval kicks in
+      .catch(() => {
+        setAutoAnalyzing(false);
+        setCachedAnalysis(null);
+      });
+  }, [analysisState, hasDeepAnalysis, autoAnalyzing, id]);
+
+  // Clear auto-analyzing state once depth-15 completes
+  useEffect(() => {
+    if (hasDeepAnalysis && autoAnalyzing) {
+      setAutoAnalyzing(false);
+      setCachedAnalysis(null);
+    }
+  }, [hasDeepAnalysis, autoAnalyzing]);
+
   const handleTriggerAnalysis = useCallback(async () => {
     if (!id) return;
     await triggerAnalysis(id);
     await fetchGame(id);
   }, [id, triggerAnalysis, fetchGame]);
+
+  const startFen = useMemo(() => new Chess().fen(), []);
+  const prevFen = currentMoveIndex > 0
+    ? entries[currentMoveIndex - 1]?.fen ?? startFen
+    : startFen;
 
   const lastMoveSquares = useMemo<[string, string] | null>(
     () => currentEntry
@@ -196,32 +246,50 @@ export function GameReview() {
             />
           </div>
 
+          {/* Eval graph */}
+          <div style={{ paddingLeft: 20, paddingRight: 0 }}>
+            <EvalGraph
+              entries={entries}
+              currentMoveIndex={currentMoveIndex}
+              onSelectMove={goToMove}
+            />
+          </div>
+
           {/* Nav controls */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "0.25rem" }}>
+          <div style={{ paddingLeft: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem", paddingTop: "0.375rem" }}>
             <div style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              background: "#1A2E45",
-              borderRadius: 8,
-              padding: "3px 8px 3px 4px",
+              background: "#132840",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.08)",
+              padding: "4px 8px",
               gap: 2,
+              width: "100%",
+              justifyContent: "center",
             }}>
-              <NavBtn onClick={goToStart} title="Start (↑)"><IconFirst /></NavBtn>
-              <NavBtn onClick={goBack}    title="Previous (←)"><IconPrev /></NavBtn>
-              <NavBtn onClick={goForward} title="Next (→)"><IconNext /></NavBtn>
-              <NavBtn onClick={goToEnd}   title="End (↓)"><IconLast /></NavBtn>
-              <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.15)", margin: "0 4px" }} />
+              <NavBtn onClick={goToStart} title="First move"><IconFirst /></NavBtn>
+              <NavBtn onClick={goBack}    title="Previous move"><IconPrev /></NavBtn>
+
+              <div style={{
+                minWidth: 72, textAlign: "center", userSelect: "none",
+                fontSize: "0.8125rem", fontWeight: 600, color: "#8FA3B8",
+              }}>
+                {currentMoveIndex < 0 ? "Start" : `${currentMoveIndex + 1} / ${entries.length}`}
+              </div>
+
+              <NavBtn onClick={goForward} title="Next move"><IconNext /></NavBtn>
+              <NavBtn onClick={goToEnd}   title="Last move"><IconLast /></NavBtn>
+
+              <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.1)", margin: "0 6px" }} />
+
               <NavBtn onClick={() => setOrientation(o => o === "white" ? "black" : "white")} title="Flip board">
                 <IconFlip />
               </NavBtn>
-              <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.15)", margin: "0 4px" }} />
-              <span style={{ fontSize: "0.625rem", color: "#8FA3B8", fontWeight: 500, letterSpacing: "0.02em", userSelect: "none" }}>← →</span>
             </div>
-          </div>
-
-          {/* Position counter */}
-          <div style={{ textAlign: "center", fontSize: "0.6875rem", color: "#4D6A82", letterSpacing: "0.03em" }}>
-            {currentMoveIndex < 0 ? "Start" : `Move ${currentMoveIndex + 1} / ${entries.length}`}
+            <span style={{ fontSize: "0.6875rem", color: "#4D6A82", userSelect: "none" }}>
+              ← → arrow keys to navigate
+            </span>
           </div>
         </div>
 
@@ -284,7 +352,7 @@ export function GameReview() {
             <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#F5F0E8" }}>
               Analysis
             </span>
-            {analysisState === "done" && (
+            {analysisState === "done" && !autoAnalyzing && (
               <span style={{
                 fontSize: "0.6875rem",
                 fontWeight: 600,
@@ -296,12 +364,28 @@ export function GameReview() {
                 Complete
               </span>
             )}
+            {autoAnalyzing && (
+              <span style={{
+                fontSize: "0.6875rem",
+                fontWeight: 500,
+                color: "#8FA3B8",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.375rem",
+              }}>
+                <SmallSpinner />
+                Analyzing…
+              </span>
+            )}
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "0.75rem 1rem" }}>
             <AnalysisPanel
-              analysis={currentGame.analysis}
-              analysisState={analysisState}
+              analysis={autoAnalyzing ? cachedAnalysis : currentGame.analysis}
+              analysisState={autoAnalyzing ? "done" : analysisState}
               currentEntry={currentEntry}
+              hasDeepAnalysis={hasDeepAnalysis}
+              autoAnalyzing={autoAnalyzing}
+              prevFen={prevFen}
               onTriggerAnalysis={handleTriggerAnalysis}
             />
           </div>
@@ -344,9 +428,9 @@ function NavBtn({ onClick, title, children }: { onClick: () => void; title: stri
       title={title}
       className="btn-ghost"
       style={{
-        width: 30, height: 30, padding: 0,
+        width: 36, height: 36, padding: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
-        borderRadius: 5, flexShrink: 0,
+        borderRadius: 7, flexShrink: 0,
       }}
     >
       {children}
@@ -387,5 +471,18 @@ function IconFlip() {
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
       <path d="M2 8h12M10 5l3 3-3 3M6 11L3 8l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
+  );
+}
+
+function SmallSpinner() {
+  return (
+    <div style={{
+      width: 10, height: 10,
+      border: "1.5px solid rgba(143,163,184,0.25)",
+      borderTopColor: "#8FA3B8",
+      borderRadius: "50%",
+      flexShrink: 0,
+      animation: "spin 0.75s linear infinite",
+    }} />
   );
 }

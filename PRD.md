@@ -1,7 +1,7 @@
 # Chesslens — Personal Chess Game Reviewer
-**Version:** 3.2 · Player Profile Engine | **Status:** Layer 1 + Layer 2 Complete | **Audience:** Individual Chess Players
+**Version:** 3.5 · Analysis Engine Calibrated | **Status:** Layer 1 + Layer 2 Complete, Game Review Complete | **Audience:** Individual Chess Players
 
-_Last updated: 2026-05-19 — Session 10_
+_Last updated: 2026-05-23 — Session 14_
 
 An AI-powered platform that analyses chess games from Chess.com to build a comprehensive player profile — identifying playing style, opening repertoire, phase accuracy, tactical blind spots, and time pressure patterns — then delivering personalised coaching recommendations. One-click pipeline: import → instant profile → accuracy fills in as a background job.
 
@@ -74,11 +74,11 @@ My Games → "+ Import Games" → import form
 | Pillar | Status |
 |--------|--------|
 | **Chess.com Import** — date range, game type, time control filters, incremental progress | ✅ Built |
-| **Per-Game Review** — board replay, eval bar, eval graph, move classification, Claude summary | ✅ Built |
+| **Per-Game Review** — board replay, eval bar, eval graph, move classification, verbal explanations, Claude summary | ✅ Built |
 | **Layer 1 Profile — Instant** — rating history (dual TC dropdowns), W/D/L, White/Black win %, opening repertoire, opponents' openings, playing style, coaching | ✅ Built — frontend + backend |
 | **Layer 2 Profile — Accuracy** — auto-triggers after Layer 1; slim banner while running; calm placeholder cards; fills in when done | ✅ Built — frontend + backend |
-| **My Games page** — game library, filters, per-game Stockfish, Review | ✅ Built |
-| **Scalable Analysis Engine** — opening depth cutoff + critical position detection + FEN dedup cache + Stockfish NNUE depth 1 | ✅ Built |
+| **My Games page** — game library, filters, per-game Stockfish, Review gate | ✅ Built |
+| **Scalable Analysis Engine** — all-moves depth-5 bulk (~13s/66 games) + depth-12 individual (~1s/game, chain model) | ✅ Built |
 
 ---
 
@@ -111,24 +111,22 @@ My Games → "+ Import Games" → import form
 
 ```
 All games → raw positions
-      ↓ Opening skip — first 10 half-moves skipped (pure Python, no Polyglot)
-Post-opening positions
-      ↓ Critical position detection (pure Python)
-        captures, checks, moves to squares attacked by opponent non-pawn pieces
-~15–20 critical positions per game
+      ↓ Opening skip — first 10 half-moves skipped (move_number ≤ 5)
+Post-opening positions (all moves)
+      ↓ Chain model: eval_before = prev eval_after (1 Stockfish call/move, not 2)
       ↓ FEN deduplication + global eval cache (fen_eval_cache table, shared across ALL users)
 Cache miss positions only
-      ↓ Stockfish NNUE depth 1, single engine reused across games
-<60s for 500+ games — accuracy stored per game in GameAnalysis
+      ↓ Stockfish depth 5, single engine reused across games
+~13s for 66 games — accuracy stored per game in GameAnalysis
 ```
 
-> **Open issue:** Depth-1 produces inflated accuracy values (85–95% vs realistic 65–85%). Goal is to increase to depth 5–8 without compromising the <60s target. Accuracy Over Time chart carries a "trend indicator only" disclaimer until resolved. See `context.md` open issues.
+**Accuracy formula:** Standard chess.com / Lichess win-probability formula. Confirmed calibrated at ~85% for 1608 ELO player — consistent with depth-12 individual analysis. Opening skip: first 10 half-moves (move_number ≤ 5) excluded from accuracy calculation in both bulk and individual pipelines.
 
 **Performance targets:**
-- MVP: < 60s for 10,000 games
-- Post-MVP: < 30s (batch neural net, e.g. Maia-style)
+- Bulk (Layer 2): ~12s for 66 games, ~200s for 1000 games
+- Individual (Game Review): ~1s per game (chain model + chess.engine + depth 12)
 
-### Per-Game Review (unchanged)
+### Per-Game Review
 - Full board replay with FEN-based position rendering
 - Eval bar (vertical, white/black split)
 - Eval graph (clickable — click any point to jump to that move)
@@ -137,8 +135,10 @@ Cache miss positions only
 - Last-move squares highlighted in gold
 - Board coordinate labels
 - Keyboard navigation: ← → ↑ ↓
-- Flip board toggle
-- Claude narrative summary per game
+- Flip board toggle + auto-orientation (board flips to user's colour on load)
+- Verbal move explanations: "Blunder — dropped 2.3 pawns. Best was Bb6."
+- Analysis gate: "Review" in My Games triggers depth-12 analysis first; navigates only when complete
+- Claude narrative summary per game (requires Anthropic API credits)
 
 ---
 
@@ -162,13 +162,12 @@ Cache miss positions only
 - JWT auth (email/password + Google OAuth)
 - Dark navy UI (Stripe-inspired design system)
 
-### Built — Layer 2 Backend Pipeline (Session 10)
+### Built — Layer 2 Backend Pipeline (Sessions 10–14)
 
 | Item | Status |
 |------|--------|
 | `fen_eval_cache` DB table + model | ✅ Done |
-| `STOCKFISH_BULK_DEPTH=1` config | ✅ Done |
-| `services/bulk_analysis.py` — selective pipeline | ✅ Done |
+| `services/bulk_analysis.py` — all-moves depth-5 chain model | ✅ Done |
 | Wire Layer 2 into `build_profile()` after Layer 1 | ✅ Done |
 | Dashboard: poll during Layer 2 run (`layer2Running` condition) | ✅ Done |
 | `pollProfile()` store action (silent poll — no loading flash) | ✅ Done |
@@ -176,6 +175,10 @@ Cache miss positions only
 | W/D/L stacked bar in stats strip | ✅ Done |
 | Accuracy Over Time: As White / As Black / All Games toggle + 15-game rolling avg | ✅ Done |
 | Accuracy history format `{date, accuracy, color}` — user's own accuracy only | ✅ Done |
+| **Individual game analysis engine rewrite** — `chess.engine` chain model, depth 12 (~1s/game) | ✅ Done |
+| `_compute_accuracy` fix — opening skip + None-eval guard | ✅ Done |
+| Game Review gate — "Preparing..." blocks navigation until depth-12 analysis completes | ✅ Done |
+| Bulk analysis guard — `accuracy_white IS NOT NULL` prevents overwriting depth-12 data | ✅ Done |
 
 ### Out of Scope — Not Yet Built
 
@@ -214,7 +217,8 @@ Cache miss positions only
 |--------|--------|
 | Min recommended games | 100 (for reliable pattern detection) |
 | Layer 1 profile build time | < 5 seconds |
-| Layer 2 build time (10,000 games) | < 60 seconds (MVP), < 30 seconds (post-MVP) |
+| Layer 2 build time (1,000 games) | ~200s (depth 5, all-moves) |
+| Individual game analysis time | ~1s/game (depth 12, chain model) |
 | Opening recommendations | 3+ per session |
 | Time control filters | 5 categories (bullet / blitz / rapid / classical / chess960) |
 | Platforms supported | 1 (Chess.com) |
@@ -227,8 +231,8 @@ Cache miss positions only
 |-------|-----------|
 | Backend | FastAPI + SQLite (SQLAlchemy) |
 | Auth | JWT (access + refresh tokens), SHA-256 pre-hash → bcrypt 3.2.2 |
-| Analysis engine — game review | Stockfish CLI depth 15 (subprocess) |
-| Analysis engine — bulk profile | Stockfish NNUE depth 1, ProcessPoolExecutor(8 workers) |
+| Analysis engine — game review | python-chess `chess.engine` depth 12, chain model (~1s/game) |
+| Analysis engine — bulk profile | Stockfish depth 5, all-moves chain model, ProcessPoolExecutor(8 workers) |
 | Chess parsing | python-chess (+ Polyglot opening book) |
 | AI narrative | Anthropic Claude API (Sonnet for profile, Haiku for per-game) |
 | Frontend | React 18 + Vite + TypeScript |
@@ -265,7 +269,7 @@ Cache miss positions only
 | ✅ Done | Dashboard redesign (state machine, all states, dual TC dropdowns, analysis-unavailable card) |
 | ✅ Done | My Games page |
 | ✅ Done | Home page redesign |
-| 🔴 High | Layer 2 backend pipeline — bulk_analysis + FEN cache + DB migrations |
+| ✅ Done | Layer 2 backend pipeline — bulk_analysis (depth-5 all-moves chain model) + FEN cache + DB migrations |
 | 🟡 Medium | Mobile responsiveness (prerequisite for mobile app launch) |
 | 🟡 Medium | SaaS deployment (Fly.io + Postgres migration) |
 | 🟡 Medium | User onboarding flow |

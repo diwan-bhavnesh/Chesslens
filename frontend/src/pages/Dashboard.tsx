@@ -762,7 +762,7 @@ function ProfileView({ profile, gameCount }: { profile: PlayerProfile; gameCount
         <SectionCard
           title="Accuracy Over Time"
           accentColor="#a78bfa"
-          subtitle="Approximate — depth-1 Stockfish on tactical positions only. Use as a trend indicator, not a precise score."
+          subtitle="Based on depth-5 Stockfish analysis of tactical positions."
         >
           <AccuracyChart profile={profile} />
         </SectionCard>
@@ -775,7 +775,7 @@ function ProfileView({ profile, gameCount }: { profile: PlayerProfile; gameCount
 
 export function Dashboard() {
   const { games, isLoading: gamesLoading, fetchGames, clearAllGames } = useGameStore();
-  const { profile, isLoading: profileLoading, fetchProfile, pollProfile, createProfile, clearProfile } = useProfileStore();
+  const { profile, isLoading: profileLoading, fetchProfile, pollProfile, createProfile, rebuildProfile, clearProfile } = useProfileStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -783,10 +783,21 @@ export function Dashboard() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const staleRebuildRef = useRef(false);
+
   useEffect(() => {
     fetchGames();
     fetchProfile();
   }, []);
+
+  // If the profile is stuck in 'pending' with no active build (e.g. after a reset),
+  // force-trigger a rebuild so the user isn't stuck watching a spinner forever.
+  useEffect(() => {
+    if (profile?.status === "pending" && !staleRebuildRef.current) {
+      staleRebuildRef.current = true;
+      rebuildProfile().catch(() => {});
+    }
+  }, [profile?.status]);
 
   const isPipelineActive = profile?.status === "pending" || profile?.status === "running";
   const hasGames = games.length > 0;
