@@ -374,7 +374,7 @@ const RatingChart = memo(function RatingChart({ profile }: { profile: PlayerProf
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={points} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="date" tick={{ fill: "#4D6A82", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <XAxis dataKey="date" tick={false} tickLine={false} axisLine={false} />
               <YAxis tick={{ fill: "#4D6A82", fontSize: 11 }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
               <Tooltip
                 contentStyle={{ background: "#1A2E45", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#F5F0E8" }}
