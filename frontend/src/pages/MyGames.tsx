@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useGameStore } from "../store/gameStore";
 import { useFilterStore } from "../store/filterStore";
 import { useAuthStore } from "../store/authStore";
+import { useProfileStore } from "../store/profileStore";
 import type { Game } from "../types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -609,8 +610,20 @@ export function MyGames() {
   const { games, isLoading, fetchGames, deleteGame, triggerAnalysis, refreshGameInList } = useGameStore();
   const { result, gameType, dateKey, sortBy, sortDir, clearFilters } = useFilterStore();
   const { user } = useAuthStore();
+  const { profile } = useProfileStore();
   const navigate = useNavigate();
   const username = user?.chesscom_username ?? null;
+
+  const layer2Running = !!(
+    profile &&
+    profile.status === "done" &&
+    profile.games_total != null &&
+    !(
+      (profile.accuracy_history?.length ?? 0) > 0 &&
+      profile.phase_accuracy?.opening != null &&
+      profile.time_pressure?.normal_accuracy != null
+    )
+  );
 
   const [page, setPage] = useState(0);
   const [awaitingReviewId, setAwaitingReviewId] = useState<string | null>(null);
@@ -760,6 +773,37 @@ export function MyGames() {
       {!isLoading && games.length > 0 && (
         <>
           <StatsStrip total={filtered.length} wins={wins} draws={draws} losses={losses} dateRange={dateRange} />
+
+          {layer2Running && (
+            <div style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.75rem",
+              background: "rgba(37,99,235,0.08)",
+              border: "1px solid rgba(37,99,235,0.2)",
+              borderRadius: 10,
+              padding: "0.75rem 1rem",
+              marginBottom: "0.25rem",
+            }}>
+              <div style={{
+                width: 7, height: 7, borderRadius: "50%",
+                background: "#2563EB", flexShrink: 0, marginTop: 5,
+                boxShadow: "0 0 6px #2563EB",
+                animation: "pulse 1.8s ease-in-out infinite",
+              }} />
+              <div>
+                <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#F5F0E8" }}>
+                  Stockfish is scoring your games
+                </p>
+                <p style={{ margin: "0.2rem 0 0", fontSize: "0.8125rem", color: "#8FA3B8", lineHeight: 1.5 }}>
+                  Accuracy percentages fill in as each position is evaluated
+                  {profile?.games_total ? ` — ${profile.games_total.toLocaleString()} games takes a few minutes` : ""}.
+                  Filters and sorting work on all available data in the meantime.
+                </p>
+              </div>
+            </div>
+          )}
+
           <FiltersBar />
 
           {filtered.length === 0 && hasFilters ? (
