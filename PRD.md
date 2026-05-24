@@ -96,7 +96,7 @@ My Games → "+ Import Games" → import form
 | Playing style classification + evidence | Single Claude synthesis call |
 | Coaching recommendations | Single Claude synthesis call |
 
-### Layer 2 — Background Accuracy (selective Stockfish, <60s for 10,000 games)
+### Layer 2 — Background Accuracy (all-moves Stockfish, ~200s for 1,000 games)
 
 | Section | Data Source |
 |---------|------------|

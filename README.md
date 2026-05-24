@@ -66,7 +66,7 @@ chesslens/
 │   │   └── services/
 │   │       ├── profile.py        # Layer 1 computation + Claude synthesis
 │   │       ├── bulk_analysis.py  # Layer 2 selective Stockfish pipeline
-│   │       ├── stockfish.py      # Per-game depth-15 analysis
+│   │       ├── stockfish.py      # Per-game depth-12 analysis (chain model, ~1s/game)
 │   │       ├── claude.py         # Claude API calls
 │   │       └── chesscom.py       # Chess.com archive import
 │   ├── regression_test.py        # End-to-end regression suite (117 checks)

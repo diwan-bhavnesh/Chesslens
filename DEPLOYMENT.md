@@ -6,11 +6,13 @@
 
 ## Infrastructure
 
-| Layer | Service | Cost |
-|-------|---------|------|
-| **Backend** | [Fly.io](https://fly.io) — `performance-1x` | ~$10/mo |
-| **Database** | Fly.io Postgres | Free tier or ~$7/mo |
-| **Frontend** | [Vercel](https://vercel.com) Hobby | Free |
+| Layer | Service | Plan | Cost |
+|-------|---------|------|------|
+| **Backend** | [Fly.io](https://fly.io) | `shared-cpu-1x` 256 MB (3 VMs free) | $0 |
+| **Database** | Fly.io Postgres | Free tier | $0 |
+| **Frontend** | [Vercel](https://vercel.com) | Hobby | $0 |
+
+> **Free tier capacity:** Suitable for personal use and up to ~20 concurrent users. Scale up by changing the `[[vm]]` block in `fly.toml` — no other changes needed.
 
 - Backend URL: `https://chesslens-api.fly.dev`
 - Frontend URL: `https://chesslens.vercel.app`
@@ -77,8 +79,8 @@ primary_region = "sin"
   min_machines_running = 0
 
 [[vm]]
-  memory = "1gb"
-  cpu_kind = "performance"
+  memory = "256mb"
+  cpu_kind = "shared"
   cpus = 1
 ```
 

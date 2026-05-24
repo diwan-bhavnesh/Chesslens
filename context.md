@@ -23,7 +23,7 @@ _Last updated: 2026-05-24 — Session 16_
 | 13 | 2026-05-23 | Game Review gate + bug fixes | "Review" in My Games now triggers depth-15 analysis first and shows "Preparing… Xs" — navigates only when analysis is complete. Already-analyzed games open instantly. Dashboard no longer spins forever when profile stuck in stale `pending` after a reset. `/profile/rebuild` endpoint is now force-safe. |
 | 14 | 2026-05-23 | Accuracy calibration + analysis speed | All-moves depth-5 bulk (replaces sparse critical-position filter). Accuracy 87.7% → 85.4% — confirmed correct for 1608 ELO. Individual game analysis rewritten: chain model + chess.engine (1 search/move vs 3) + depth 12 → ~1s/game (was 15–40s). All games wiped clean slate. 117/117 regression suite. |
 | 15 | 2026-05-23 | Plan check + GitHub push + deployment plan | Confirmed all plan phases (3–4d) already implemented. Pushed Sessions 12–14 work to GitHub (commit a9f2c06). Removed stale root-level regression.md duplicate. Wrote complete production deployment plan (Fly.io + Vercel + Alembic + Postgres). |
-| 16 | 2026-05-24 | E2E test + polish fixes | README updated with local setup guide. DEPLOYMENT.md added. End-to-end test run: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Added Layer 2 progress banner in My Games. Removed X-axis labels from Rating History and Accuracy Over Time charts. |
+| 16 | 2026-05-24 | E2E test + polish + Review gate fixes | README updated with local setup guide. DEPLOYMENT.md added. E2E verified: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Layer 2 progress banner added. X-axis labels removed from charts. "Preparing..." spinner fixed (was disappearing mid-analysis). Poll interval reduced 3s → 1s. PRODUCT_TIMELINE.md created. |
 
 ---
 
@@ -269,7 +269,6 @@ See previous context entries.
 
 | Priority | Issue | Notes |
 |----------|-------|-------|
-| 🔴 High | "Preparing..." flow — needs manual verification | DB is fresh. Import games, click Review on any game. Expected: brief "Preparing… Xs" (~1–2s with new depth-12 engine), then Game Review with full move classifications and verbal explanations. |
 | 🟡 Medium | Anthropic API credits | Playing Style + Coaching sections blank until user tops up at console.anthropic.com |
 | 🟢 Low | `bcrypt` pinned to 3.2.2 | Cannot upgrade — passlib 1.7.4 incompatible with bcrypt ≥ 4.0 |
 
