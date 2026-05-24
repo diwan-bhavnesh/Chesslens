@@ -511,7 +511,7 @@ function GameRow({ game, username, onDelete, onAnalyze, onReview, isAwaitingRevi
 
         {/* Actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {isDone && isAwaitingReview ? (
+          {isAwaitingReview ? (
             <span style={{
               display: "flex", alignItems: "center", gap: "0.375rem",
               fontSize: "0.6875rem", color: "#8FA3B8", whiteSpace: "nowrap",
@@ -669,7 +669,7 @@ export function MyGames() {
     if (hasPendingGame && !gamePollRef.current) {
       gamePollRef.current = setInterval(() => {
         pendingIdsRef.current.forEach(id => refreshGameInList(id));
-      }, 3000);
+      }, 1000);
     } else if (!hasPendingGame && gamePollRef.current) {
       clearInterval(gamePollRef.current);
       gamePollRef.current = null;
