@@ -4,6 +4,8 @@ An AI-powered chess analysis platform that imports your games from Chess.com and
 
 **Stack:** FastAPI · SQLite · React · Vite · TypeScript · Stockfish · Claude (Anthropic)
 
+> **Status:** Feature-complete MVP. All core analysis features built and tested (117/117 regression checks). Production deployment planned — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ---
 
 ## What It Does
@@ -41,7 +43,7 @@ Per-game review is also available: full board replay, eval bar, eval graph, move
 |-------|-----------|
 | Backend API | FastAPI + Uvicorn |
 | Database | SQLite (Postgres-ready schema) |
-| Chess engine | Stockfish (depth 15 per-game, depth 1 bulk) |
+| Chess engine | Stockfish (depth 12 per-game chain model ~1s/game, depth 5 bulk all-moves) |
 | AI synthesis | Anthropic Claude (style + coaching + per-game summary) |
 | Frontend | React 18 + Vite + TypeScript |
 | State management | Zustand |
@@ -67,7 +69,7 @@ chesslens/
 │   │       ├── stockfish.py      # Per-game depth-15 analysis
 │   │       ├── claude.py         # Claude API calls
 │   │       └── chesscom.py       # Chess.com archive import
-│   ├── regression_test.py        # End-to-end regression suite (95 checks)
+│   ├── regression_test.py        # End-to-end regression suite (117 checks)
 │   └── .env                      # Environment variables (not committed)
 └── frontend/
     └── src/
@@ -85,34 +87,54 @@ chesslens/
 
 - Python 3.9+
 - Node.js 18+
-- **Stockfish binary** — the chess engine executable must be installed separately on your machine. The Python `stockfish` package (in `requirements.txt`) is only a wrapper that calls the binary; it does not bundle the engine itself.
+- **Stockfish binary** — must be installed separately. The Python package in `requirements.txt` is only a wrapper; it does not bundle the engine.
   - macOS: `brew install stockfish`
-  - Linux: `apt install stockfish` or download from [stockfishchess.org](https://stockfishchess.org/download/)
-  - Windows: download the `.exe` from [stockfishchess.org](https://stockfishchess.org/download/) and set `STOCKFISH_PATH` in `.env` to the full path
-- Anthropic API key
-- Google OAuth credentials (for Google sign-in)
+  - Ubuntu/Debian: `sudo apt install stockfish`
+  - Windows: download the `.exe` from [stockfishchess.org](https://stockfishchess.org/download/) and note the path
 
-### Backend
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/diwan-bhavnesh/Chesslens.git
+cd Chesslens
+```
+
+### 2. Backend
 
 ```bash
 cd backend
-python3 -m venv venv && source venv/bin/activate
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Create your env file from the template, then fill in the required values
+# Create your env file from the template
 cp .env.example .env
+```
 
+Open `backend/.env` and fill in at minimum:
+- `SECRET_KEY` — any random string: `python3 -c "import secrets; print(secrets.token_hex(32))"`
+- `STOCKFISH_PATH` — path to your Stockfish binary (e.g. `/opt/homebrew/bin/stockfish` on macOS)
+
+Everything else is optional for a basic run (see [Environment Variables](#environment-variables) below).
+
+```bash
+# Start the backend (runs at http://localhost:8000)
 python3 -m uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend
+### 3. Frontend
 
 ```bash
 cd frontend
 npm install
 npm run dev          # dev server at http://localhost:5173
-npm run build        # production build
 ```
+
+Open **http://localhost:5173** in your browser. Register an account, import your Chess.com games, and explore.
 
 ---
 
@@ -129,7 +151,7 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values. The file h
 - `ANTHROPIC_API_KEY` — needed for playing style classification and coaching recommendations. Without it, the profile builds but those sections will be empty.
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — needed for "Sign in with Google" only. Email/password registration and login work without it.
 
-> `STOCKFISH_BULK_DEPTH=1` intentionally trades accuracy for speed (<60s for 500+ games). The Accuracy Over Time chart carries a "trend indicator" disclaimer. Increasing to depth 5–8 is a planned improvement.
+> `ANTHROPIC_API_KEY` is optional. Without it, all Stockfish-based features (accuracy, Game Review, phase accuracy, time pressure) work fully. Only the AI synthesis sections (Playing Style, Coaching, per-game narrative) will be empty.
 
 ---
 
@@ -142,7 +164,7 @@ cd backend
 python3 regression_test.py
 ```
 
-95 checks across 15 sections — auth, game import, Stockfish analysis, player profile (Layer 1 + Layer 2), FEN cache, API availability. All must pass before any session is declared complete.
+117 checks across 17 sections — auth, game import, Stockfish analysis (bulk depth-5 + individual depth-12), player profile (Layer 1 + Layer 2), FEN cache, accuracy calibration, API availability. All must pass before any session is declared complete.
 
 ---
 
@@ -152,7 +174,7 @@ python3 regression_test.py
 
 **Two-layer profile pipeline:**
 - Layer 1 runs from PGN metadata only — no Stockfish. Profile appears in seconds for any game count.
-- Layer 2 starts automatically after Layer 1. Selective Stockfish evaluation: skip first 10 half-moves, evaluate only critical positions (captures, checks, sacrifice-candidate squares), cache FEN evals globally across all users. Runs in the background; user can leave the page.
+- Layer 2 starts automatically after Layer 1. All-moves depth-5 Stockfish evaluation using a running eval chain (1 search per move, not 2). Skips first 10 half-moves (opening). FEN evals cached globally across all users. Runs in the background; user can leave the page.
 
 **Auth:** Passwords are SHA-256 pre-hashed before bcrypt to avoid the 72-byte truncation issue. bcrypt is pinned to 3.2.2 (passlib 1.7.4 incompatible with bcrypt ≥ 4.0).
 
@@ -162,9 +184,11 @@ python3 regression_test.py
 
 ## Roadmap
 
-- [ ] Increase `STOCKFISH_BULK_DEPTH` to 5–8 for accurate absolute accuracy values (open issue — must not exceed 60s build time)
+- [x] Depth-5 all-moves bulk analysis (calibrated accuracy)
+- [x] Depth-12 per-game review (~1s/game with chain model)
+- [x] Verbal move explanations + eval graph in Game Review
+- [ ] SaaS deployment — Fly.io (backend) + Vercel (frontend) + Postgres ([plan](./DEPLOYMENT.md))
 - [ ] Mobile responsiveness
-- [ ] SaaS deployment (Fly.io + Postgres migration)
 - [ ] React Native mobile app
 - [ ] Lichess import (code exists, parked)
 - [ ] Subscription / payment system
