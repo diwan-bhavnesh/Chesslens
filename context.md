@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-23 — Session 15_
+_Last updated: 2026-05-24 — Session 16_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -23,6 +23,7 @@ _Last updated: 2026-05-23 — Session 15_
 | 13 | 2026-05-23 | Game Review gate + bug fixes | "Review" in My Games now triggers depth-15 analysis first and shows "Preparing… Xs" — navigates only when analysis is complete. Already-analyzed games open instantly. Dashboard no longer spins forever when profile stuck in stale `pending` after a reset. `/profile/rebuild` endpoint is now force-safe. |
 | 14 | 2026-05-23 | Accuracy calibration + analysis speed | All-moves depth-5 bulk (replaces sparse critical-position filter). Accuracy 87.7% → 85.4% — confirmed correct for 1608 ELO. Individual game analysis rewritten: chain model + chess.engine (1 search/move vs 3) + depth 12 → ~1s/game (was 15–40s). All games wiped clean slate. 117/117 regression suite. |
 | 15 | 2026-05-23 | Plan check + GitHub push + deployment plan | Confirmed all plan phases (3–4d) already implemented. Pushed Sessions 12–14 work to GitHub (commit a9f2c06). Removed stale root-level regression.md duplicate. Wrote complete production deployment plan (Fly.io + Vercel + Alembic + Postgres). |
+| 16 | 2026-05-24 | E2E test + polish fixes | README updated with local setup guide. DEPLOYMENT.md added. End-to-end test run: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Added Layer 2 progress banner in My Games. Removed X-axis labels from Rating History and Accuracy Over Time charts. |
 
 ---
 
@@ -96,6 +97,29 @@ _Last updated: 2026-05-23 — Session 15_
 ---
 
 ## Session Decisions Log
+
+### Session 16 (2026-05-24) — E2E Test + Polish Fixes
+
+**Changes made:**
+
+1. **README + DEPLOYMENT.md** — Updated README with numbered local setup guide (clone → Stockfish → .env → run). Created `DEPLOYMENT.md` with full Fly.io + Vercel + Postgres + Alembic deployment plan.
+
+2. **My Games: 200-game cap lifted** — `gameStore.ts`: `limit=200` → `limit=5000`. Root cause: hardcoded cap meant users with large libraries only saw the 200 most-recent games. Dashboard showed correct total (1776) but My Games was silently truncated.
+
+3. **My Games: Layer 2 progress banner** — Added a pulsing blue banner between the stats strip and filters while bulk accuracy analysis is running. Copy: *"Stockfish is scoring your games — accuracy percentages fill in as Stockfish works through your games. Filters and sorting work on all available data in the meantime."* Auto-disappears when Layer 2 completes.
+
+4. **Dashboard charts: X-axis labels removed** — `tick={false}` on both Rating History and Accuracy Over Time `XAxis` components. Hover tooltips already show date + value — labels were redundant clutter.
+
+**Files changed:**
+- `frontend/src/store/gameStore.ts`
+- `frontend/src/pages/MyGames.tsx`
+- `frontend/src/pages/Dashboard.tsx`
+- `README.md`
+- `DEPLOYMENT.md` (new)
+
+**Tests:** 17/17 Vitest unit tests passing. E2E flow verified: Google OAuth → import 1776 games → Layer 1 profile → Layer 2 accuracy → My Games (all games) → Game Review.
+
+---
 
 ### Session 15 (2026-05-23) — Plan Check + GitHub Push + Deployment Plan
 
@@ -251,15 +275,13 @@ See previous context entries.
 
 ---
 
-## What's Next — Session 16
+## What's Next — Session 17
 
 **Start here:**
 
-1. **Execute deployment plan** — plan drafted and saved. Three open decisions before starting: custom domain vs subdomains, machine size (`performance-1x` vs `shared-cpu-1x`), Fly.io region (Singapore recommended). Plan file: `.claude/plans/frolicking-zooming-pearl.md`.
+1. **Execute deployment plan** — three open decisions to make first: custom domain vs subdomains, machine size (`performance-1x` vs `shared-cpu-1x`), Fly.io region (Singapore recommended). Plan file: `.claude/plans/frolicking-zooming-pearl.md`.
 
-2. **Verify "Preparing..." gate end-to-end** — import games from Chess.com, go to My Games, click Review. With depth-12 chain model the wait should be ~1–2s, not 15–40s.
-
-3. **Playing Style & Coaching** — restore once Anthropic credits topped up (console.anthropic.com).
+2. **Playing Style & Coaching** — restore once Anthropic credits topped up (console.anthropic.com).
 
 **Backlog (no session assigned yet):**
 - Mobile responsiveness

@@ -1,7 +1,7 @@
 # Chesslens — Personal Chess Game Reviewer
-**Version:** 3.5 · Analysis Engine Calibrated | **Status:** Layer 1 + Layer 2 Complete, Game Review Complete | **Audience:** Individual Chess Players
+**Version:** 3.6 · E2E Tested | **Status:** Layer 1 + Layer 2 Complete, Game Review Complete, MVP Ready | **Audience:** Individual Chess Players
 
-_Last updated: 2026-05-23 — Session 14_
+_Last updated: 2026-05-24 — Session 16_
 
 An AI-powered platform that analyses chess games from Chess.com to build a comprehensive player profile — identifying playing style, opening repertoire, phase accuracy, tactical blind spots, and time pressure patterns — then delivering personalised coaching recommendations. One-click pipeline: import → instant profile → accuracy fills in as a background job.
 
@@ -77,7 +77,7 @@ My Games → "+ Import Games" → import form
 | **Per-Game Review** — board replay, eval bar, eval graph, move classification, verbal explanations, Claude summary | ✅ Built |
 | **Layer 1 Profile — Instant** — rating history (dual TC dropdowns), W/D/L, White/Black win %, opening repertoire, opponents' openings, playing style, coaching | ✅ Built — frontend + backend |
 | **Layer 2 Profile — Accuracy** — auto-triggers after Layer 1; slim banner while running; calm placeholder cards; fills in when done | ✅ Built — frontend + backend |
-| **My Games page** — game library, filters, per-game Stockfish, Review gate | ✅ Built |
+| **My Games page** — game library (up to 5000 games), filters, per-game Stockfish, Review gate, Layer 2 progress banner | ✅ Built |
 | **Scalable Analysis Engine** — all-moves depth-5 bulk (~13s/66 games) + depth-12 individual (~1s/game, chain model) | ✅ Built |
 
 ---
