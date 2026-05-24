@@ -26,7 +26,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   fetchGames: async () => {
     set({ isLoading: true });
     try {
-      const { data } = await api.get<Game[]>("/games/?limit=200");
+      const { data } = await api.get<Game[]>("/games/?limit=5000");
       set({ games: data });
     } finally {
       set({ isLoading: false });
