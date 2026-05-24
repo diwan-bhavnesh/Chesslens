@@ -796,8 +796,7 @@ export function MyGames() {
                   Stockfish is scoring your games
                 </p>
                 <p style={{ margin: "0.2rem 0 0", fontSize: "0.8125rem", color: "#8FA3B8", lineHeight: 1.5 }}>
-                  Accuracy percentages fill in as each position is evaluated
-                  {profile?.games_total ? ` — ${profile.games_total.toLocaleString()} games takes a few minutes` : ""}.
+                  Accuracy percentages fill in as Stockfish works through your games — time varies with library size.
                   Filters and sorting work on all available data in the meantime.
                 </p>
               </div>
