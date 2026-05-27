@@ -75,6 +75,7 @@ def _accuracy_from_dicts(moves_data: list[dict], color: str) -> Optional[float]:
     relevant = [
         m for m in moves_data
         if m["color"] == color
+        and m.get("move_number", 0) > 5
         and m.get("eval_before") is not None
         and m.get("eval_after") is not None
     ]

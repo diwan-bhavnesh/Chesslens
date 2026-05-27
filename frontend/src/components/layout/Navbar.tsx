@@ -66,11 +66,7 @@ export function Navbar() {
               Sign out
             </button>
           </>
-        ) : (
-          <Link to="/login">
-            <button className="btn-ghost" style={{ fontSize: "0.9rem", padding: "0.375rem 0.875rem" }}>Sign in</button>
-          </Link>
-        )}
+        ) : null}
       </div>
     </nav>
   );
