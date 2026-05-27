@@ -1,9 +1,10 @@
 interface Props {
   eval: number | null;
   height: number;
+  flipped?: boolean;
 }
 
-export function EvalBar({ eval: evalVal, height }: Props) {
+export function EvalBar({ eval: evalVal, height, flipped = false }: Props) {
   const whitePct = (() => {
     if (evalVal == null) return 50;
     const cp = evalVal * 100;
@@ -20,6 +21,9 @@ export function EvalBar({ eval: evalVal, height }: Props) {
 
   const whiteWinning = whitePct >= 50;
 
+  // When flipped (Black at bottom), white fill anchors to top instead of bottom
+  const fillAnchor = flipped ? { top: 0 } : { bottom: 0 };
+
   return (
     <div style={{
       width: 14,
@@ -31,15 +35,15 @@ export function EvalBar({ eval: evalVal, height }: Props) {
       background: "#0D1B2A",
       boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)",
     }}>
-      {/* White fill from bottom */}
+      {/* White fill — anchors to bottom normally, top when flipped */}
       <div style={{
         position: "absolute",
-        bottom: 0,
         left: 0,
         right: 0,
         height: whiteHeight,
         background: "#F5F0E8",
         transition: "height 0.35s ease",
+        ...fillAnchor,
       }} />
 
       {/* 50% reference line */}

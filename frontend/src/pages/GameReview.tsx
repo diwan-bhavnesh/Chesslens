@@ -228,7 +228,7 @@ export function GameReview() {
           </div>
 
           <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-            <EvalBar eval={currentEntry?.eval_after ?? null} height={boardSize} />
+            <EvalBar eval={currentEntry?.eval_after ?? null} height={boardSize} flipped={orientation === "black"} />
             <ChessBoard
               fen={currentFen}
               orientation={orientation}
