@@ -105,7 +105,7 @@ _Last updated: 2026-05-27 — Session 17_
 
 1. **Production deployment — Fly.io backend** — Docker image with Stockfish via apt-get. Alembic baseline migration (9 tables). Fly Postgres attached. `postgres://` → `postgresql://` URL fix for SQLAlchemy 2.x. `email-validator==2.2.0` added (Pydantic `EmailStr` dependency). `APP_ENV=production` guards `Base.metadata.create_all` (dev-only). `min_machines_running=1` to eliminate cold starts (~3-5s).
 
-2. **Production deployment — Vercel frontend** — SPA routing via `vercel.json`. Google OAuth authorized origins/redirect URIs updated for production URLs. Deployed at https://frontend-eta-lac-31.vercel.app.
+2. **Production deployment — Vercel frontend** — SPA routing via `vercel.json`. Google OAuth authorized origins/redirect URIs updated for production URLs. Deployed at https://chesslens-io.vercel.app (also accessible via https://frontend-eta-lac-31.vercel.app).
 
 3. **Clear All bug fix (Postgres FK enforcement)** — SQLite silently ignores FK constraints; Postgres enforces them. Bulk `.delete()` bypasses ORM cascades, so child rows must be deleted explicitly. Fixed deletion order: Move → GameAnalysis → BatchAnalysis → Game → PlayerProfile.
 
