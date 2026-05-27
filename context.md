@@ -24,7 +24,7 @@ _Last updated: 2026-05-27 — Session 17_
 | 14 | 2026-05-23 | Accuracy calibration + analysis speed | All-moves depth-5 bulk (replaces sparse critical-position filter). Accuracy 87.7% → 85.4% — confirmed correct for 1608 ELO. Individual game analysis rewritten: chain model + chess.engine (1 search/move vs 3) + depth 12 → ~1s/game (was 15–40s). All games wiped clean slate. 117/117 regression suite. |
 | 15 | 2026-05-23 | Plan check + GitHub push + deployment plan | Confirmed all plan phases (3–4d) already implemented. Pushed Sessions 12–14 work to GitHub (commit a9f2c06). Removed stale root-level regression.md duplicate. Wrote complete production deployment plan (Fly.io + Vercel + Alembic + Postgres). |
 | 16 | 2026-05-24 | E2E test + polish + Review gate fixes | README updated with local setup guide. DEPLOYMENT.md added. E2E verified: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Layer 2 progress banner added. X-axis labels removed from charts. "Preparing..." spinner fixed (was disappearing mid-analysis). Poll interval reduced 3s → 1s. PRODUCT_TIMELINE.md created. |
-| 17 | 2026-05-27 | Production deployment + time-based Stockfish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme. Fixed email-validator missing. Fixed FK-constraint clear-all. Switched Stockfish from depth-based to time-based search (adapts to CPU). Fixed cold-start latency (min_machines_running=1). Fixed CSS overlap ("Preparing… Xs" overflowing into delete column). |
+| 17 | 2026-05-27 | Production deployment + polish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme, FK-constraint clear-all, cold-start latency. Switched Stockfish to time-based search. Fixed CSS overlap. Fixed eval bar not flipping with board. Accuracy % now colored by outcome (green/white/red). Fixed board auto-orientation race condition. App shared with friends for feedback. |
 
 ---
 
@@ -127,6 +127,23 @@ _Last updated: 2026-05-27 — Session 17_
 - `frontend/vercel.json` — SPA rewrites
 
 **Tests:** 117/117 regression suite passing. Both services deployed and live.
+
+**Post-deployment fixes (same session):**
+
+6. **Eval bar flip** — `EvalBar` now accepts a `flipped` prop. When board orientation is Black, white fill anchors to top instead of bottom, keeping the bar in sync with the board. `GameReview.tsx` passes `flipped={orientation === "black"}`.
+
+7. **Accuracy % color by outcome** — `AccuracyCell` now accepts `outcome` prop. Green for wins, white for draws, red for losses. Previously colored by accuracy threshold (≥80% green) which was ambiguous alongside the result badge.
+
+8. **Board auto-orientation race condition** — `useEffect` in `GameReview.tsx` was firing with stale `currentGame` (previous game still in store) before the new game loaded, locking `orientationSetRef` prematurely. Fix: guard `if (currentGame.id !== id) return` so orientation only sets when the loaded game matches the URL param.
+
+**Additional files changed:**
+- `frontend/src/components/chess/EvalBar.tsx` — added `flipped` prop
+- `frontend/src/pages/GameReview.tsx` — passes `flipped` to EvalBar; URL id guard on orientation effect
+- `frontend/src/pages/MyGames.tsx` — `AccuracyCell` colors by outcome
+
+**Open points:**
+- Custom domain / nicer subdomain (parked — low priority until wider sharing)
+- Stockfish depth tuning: upgrade to performance CPU ($6/month) if accuracy quality insufficient
 
 ---
 

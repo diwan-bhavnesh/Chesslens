@@ -78,7 +78,9 @@ My Games → "+ Import Games" → import form
 | **Layer 1 Profile — Instant** — rating history (dual TC dropdowns), W/D/L, White/Black win %, opening repertoire, opponents' openings, playing style, coaching | ✅ Built — frontend + backend |
 | **Layer 2 Profile — Accuracy** — auto-triggers after Layer 1; slim banner while running; calm placeholder cards; fills in when done | ✅ Built — frontend + backend |
 | **My Games page** — game library (up to 5000 games), filters, per-game Stockfish, Review gate, Layer 2 progress banner | ✅ Built |
-| **Scalable Analysis Engine** — all-moves depth-5 bulk (~13s/66 games) + depth-12 individual (~1s/game, chain model) | ✅ Built |
+| **Scalable Analysis Engine** — all-moves time-based bulk (0.05s/pos) + individual review (0.1s/pos, chain model) | ✅ Built |
+| **Production deployment** — Fly.io backend (Postgres, Stockfish, Alembic), Vercel frontend, Google OAuth wired | ✅ Live |
+| **UX polish** — eval bar flips with board, accuracy % colored by outcome, board auto-orientation race fix | ✅ Built |
 
 ---
 
