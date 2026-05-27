@@ -343,9 +343,9 @@ function ResultBadge({ outcome }: { outcome: "win" | "loss" | "draw" }) {
   );
 }
 
-function AccuracyCell({ pct, isBulk }: { pct: number | null | undefined; isBulk: boolean }) {
+function AccuracyCell({ pct, isBulk, outcome }: { pct: number | null | undefined; isBulk: boolean; outcome: "win" | "loss" | "draw" | null }) {
   if (pct == null) return <span style={{ color: "#4D6A82", fontSize: "0.75rem" }}>—</span>;
-  const color = pct >= 80 ? "#4ADE80" : pct >= 60 ? "#F5F0E8" : "#F87171";
+  const color = outcome === "win" ? "#4ADE80" : outcome === "loss" ? "#F87171" : "#F5F0E8";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -505,7 +505,7 @@ function GameRow({ game, username, onDelete, onAnalyze, onReview, isAwaitingRevi
               <Spinner /> Analysing…
             </span>
           ) : (
-            <AccuracyCell pct={userAccuracy ?? undefined} isBulk={isBulkDepth} />
+            <AccuracyCell pct={userAccuracy ?? undefined} isBulk={isBulkDepth} outcome={outcome} />
           )}
         </div>
 
