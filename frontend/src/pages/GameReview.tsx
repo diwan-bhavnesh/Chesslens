@@ -40,15 +40,16 @@ export function GameReview() {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  // Auto-set orientation once per game: show the board from the user's side
+  // Auto-set orientation once per game: show the board from the user's side.
+  // Guard: only act when the loaded game matches the URL id, so stale store
+  // data from a previous game can't lock the orientation before the new game arrives.
   useEffect(() => {
     if (!currentGame || orientationSetRef.current) return;
+    if (currentGame.id !== id) return;
     const username = user?.chesscom_username?.toLowerCase();
-    if (username && currentGame.black_player?.toLowerCase() === username) {
-      setOrientation("black");
-    }
+    setOrientation(username && currentGame.black_player?.toLowerCase() === username ? "black" : "white");
     orientationSetRef.current = true;
-  }, [currentGame?.id]);
+  }, [currentGame?.id, id]);
 
   const { entries, currentFen, currentEntry, currentMoveIndex, goToMove, goForward, goBack, goToStart, goToEnd } =
     useChessGame(currentGame?.pgn ?? "", currentGame?.moves ?? []);
