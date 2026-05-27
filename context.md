@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-24 — Session 16_
+_Last updated: 2026-05-27 — Session 17_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -24,6 +24,7 @@ _Last updated: 2026-05-24 — Session 16_
 | 14 | 2026-05-23 | Accuracy calibration + analysis speed | All-moves depth-5 bulk (replaces sparse critical-position filter). Accuracy 87.7% → 85.4% — confirmed correct for 1608 ELO. Individual game analysis rewritten: chain model + chess.engine (1 search/move vs 3) + depth 12 → ~1s/game (was 15–40s). All games wiped clean slate. 117/117 regression suite. |
 | 15 | 2026-05-23 | Plan check + GitHub push + deployment plan | Confirmed all plan phases (3–4d) already implemented. Pushed Sessions 12–14 work to GitHub (commit a9f2c06). Removed stale root-level regression.md duplicate. Wrote complete production deployment plan (Fly.io + Vercel + Alembic + Postgres). |
 | 16 | 2026-05-24 | E2E test + polish + Review gate fixes | README updated with local setup guide. DEPLOYMENT.md added. E2E verified: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Layer 2 progress banner added. X-axis labels removed from charts. "Preparing..." spinner fixed (was disappearing mid-analysis). Poll interval reduced 3s → 1s. PRODUCT_TIMELINE.md created. |
+| 17 | 2026-05-27 | Production deployment + time-based Stockfish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme. Fixed email-validator missing. Fixed FK-constraint clear-all. Switched Stockfish from depth-based to time-based search (adapts to CPU). Fixed cold-start latency (min_machines_running=1). Fixed CSS overlap ("Preparing… Xs" overflowing into delete column). |
 
 ---
 
@@ -53,8 +54,8 @@ _Last updated: 2026-05-24 — Session 16_
 | Import progress — incremental flush every 50 games | ✅ Done |
 | `services/bulk_analysis.py` — all-moves depth-5 chain model (Layer 2) | ✅ Done |
 | `fen_eval_cache` DB table + `FenEvalCache` ORM model | ✅ Done |
-| `STOCKFISH_BULK_DEPTH=5` config | ✅ Done |
-| `STOCKFISH_DEPTH=12` individual analysis (chain model, ~1s/game) | ✅ Done |
+| `STOCKFISH_BULK_MOVE_TIME=0.05s` config (time-based, replaces depth-based) | ✅ Done |
+| `STOCKFISH_MOVE_TIME=0.1s` individual analysis (time-based, chain model) | ✅ Done |
 | `/profile/rebuild` bypasses stuck-pending guard (`force=True`) | ✅ Done |
 | `POST /analysis/{game_id}` skips re-analysis if already at depth-12 | ✅ Done |
 | `_compute_accuracy`: opening skip (move > 5) + None eval guard | ✅ Done |
@@ -97,6 +98,37 @@ _Last updated: 2026-05-24 — Session 16_
 ---
 
 ## Session Decisions Log
+
+### Session 17 (2026-05-27) — Production Deployment + Time-based Stockfish
+
+**Changes made:**
+
+1. **Production deployment — Fly.io backend** — Docker image with Stockfish via apt-get. Alembic baseline migration (9 tables). Fly Postgres attached. `postgres://` → `postgresql://` URL fix for SQLAlchemy 2.x. `email-validator==2.2.0` added (Pydantic `EmailStr` dependency). `APP_ENV=production` guards `Base.metadata.create_all` (dev-only). `min_machines_running=1` to eliminate cold starts (~3-5s).
+
+2. **Production deployment — Vercel frontend** — SPA routing via `vercel.json`. Google OAuth authorized origins/redirect URIs updated for production URLs. Deployed at https://frontend-eta-lac-31.vercel.app.
+
+3. **Clear All bug fix (Postgres FK enforcement)** — SQLite silently ignores FK constraints; Postgres enforces them. Bulk `.delete()` bypasses ORM cascades, so child rows must be deleted explicitly. Fixed deletion order: Move → GameAnalysis → BatchAnalysis → Game → PlayerProfile.
+
+4. **Stockfish: depth-based → time-based search** — ⚠️ **Open point for future tuning.** Switched from fixed `depth=12` / `depth=5` to `time=0.1s` / `time=0.05s`. On shared-cpu-1x (Fly.io), this reaches ~depth 8-10. On faster hardware, automatically reaches higher depth. Rationale: adapts to CPU speed without code changes. If accuracy quality is insufficient, upgrade to performance CPU ($6/month extra) or increase time limits.
+
+5. **CSS fix — "Preparing… Xs" overlap** — Actions column in MyGames grid widened from 68px → 100px. Also added `overflow: hidden` to prevent any future overflow into the delete button column.
+
+**Files changed:**
+- `backend/app/config.py` — removed STOCKFISH_DEPTH/STOCKFISH_BULK_DEPTH, added STOCKFISH_MOVE_TIME/STOCKFISH_BULK_MOVE_TIME
+- `backend/app/services/stockfish.py` — both analyse calls use `Limit(time=...)`
+- `backend/app/services/bulk_analysis.py` — `_get_or_cache_eval` uses chess.engine.SimpleEngine; `bulk_analyze_games` replaced `stockfish` library with `chess.engine.SimpleEngine.popen_uci()`
+- `backend/app/database.py` — postgres:// → postgresql:// URL fix
+- `backend/app/main.py` — guarded Base.metadata.create_all for dev-only
+- `backend/app/routers/games.py` — FK-safe clear_all_games
+- `backend/requirements.txt` — added email-validator==2.2.0
+- `backend/Dockerfile` — apt-get stockfish
+- `backend/fly.toml` — min_machines_running=1
+- `frontend/src/pages/MyGames.tsx` — COL 68px → 100px, overflow: hidden on Actions div
+- `frontend/vercel.json` — SPA rewrites
+
+**Tests:** 117/117 regression suite passing. Both services deployed and live.
+
+---
 
 ### Session 16 (2026-05-24) — E2E Test + Polish Fixes
 

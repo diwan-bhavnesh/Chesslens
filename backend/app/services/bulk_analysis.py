@@ -28,7 +28,7 @@ def _move_accuracy(wp_loss: float) -> float:
 
 def _get_or_cache_eval(
     fen: str,
-    engine,
+    engine: chess.engine.SimpleEngine,
     db: Session,
     seen_hashes: set,
 ) -> Optional[float]:
@@ -41,17 +41,17 @@ def _get_or_cache_eval(
             return cached.eval_cp / 100.0
 
     try:
-        engine.set_fen_position(fen)
-        evaluation = engine.get_evaluation()
-        if evaluation["type"] == "cp":
-            eval_cp = evaluation["value"]
-            eval_pawns = eval_cp / 100.0
-        elif evaluation["type"] == "mate":
-            mate_in = evaluation["value"]
-            eval_cp = 99900 if mate_in > 0 else -99900
-            eval_pawns = 999.0 if mate_in > 0 else -999.0
+        board = chess.Board(fen)
+        info = engine.analyse(board, chess.engine.Limit(time=settings.STOCKFISH_BULK_MOVE_TIME))
+        score = info["score"].white()
+        if score.is_mate():
+            mate = score.mate()
+            eval_cp = 99900 if (mate is not None and mate > 0) else -99900
         else:
-            return None
+            cp = score.score()
+            eval_cp = cp if cp is not None else 0
+        eval_pawns = eval_cp / 100.0
+        achieved_depth = info.get("depth", 0)
     except Exception:
         return None
 
@@ -60,7 +60,7 @@ def _get_or_cache_eval(
             db.add(FenEvalCache(
                 fen_hash=fen_hash,
                 eval_cp=eval_cp,
-                depth=settings.STOCKFISH_BULK_DEPTH,
+                depth=achieved_depth,
             ))
             seen_hashes.add(fen_hash)
         except Exception:
@@ -190,9 +190,7 @@ def _analyze_single_game(
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 def bulk_analyze_games(user_id: str, db: Session, profile: PlayerProfile) -> None:
-    """Layer 2: depth-5 Stockfish (all-moves chain model) across all unanalyzed games."""
-    from stockfish import Stockfish
-
+    """Layer 2: time-based Stockfish (all-moves chain model) across all unanalyzed games."""
     # Games already fully analyzed (depth-15 or prior bulk run) — skip these
     analyzed_ids = {
         row[0] for row in
@@ -218,26 +216,29 @@ def bulk_analyze_games(user_id: str, db: Session, profile: PlayerProfile) -> Non
     db.commit()
 
     try:
-        engine = Stockfish(path=settings.STOCKFISH_PATH, depth=settings.STOCKFISH_BULK_DEPTH)
+        engine = chess.engine.SimpleEngine.popen_uci(settings.STOCKFISH_PATH)
     except Exception:
         return
 
     seen_hashes: set = set()
 
-    for i, game in enumerate(unanalyzed):
-        try:
-            _analyze_single_game(game, engine, db, seen_hashes)
-        except Exception:
-            pass
-
-        profile.games_done = i + 1
-        if (i + 1) % 10 == 0:
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-
     try:
-        db.commit()
-    except Exception:
-        db.rollback()
+        for i, game in enumerate(unanalyzed):
+            try:
+                _analyze_single_game(game, engine, db, seen_hashes)
+            except Exception:
+                pass
+
+            profile.games_done = i + 1
+            if (i + 1) % 10 == 0:
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+    finally:
+        engine.quit()

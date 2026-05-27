@@ -413,7 +413,7 @@ function Pagination({ page, totalPages, onPage }: {
 
 // ── Game table ────────────────────────────────────────────────────────────────
 
-const COL = "200px 80px 105px 1fr 100px 120px 68px 40px";
+const COL = "200px 80px 105px 1fr 100px 120px 100px 40px";
 
 function GameRow({ game, username, onDelete, onAnalyze, onReview, isAwaitingReview }: {
   game: Game; username: string | null;
@@ -510,7 +510,7 @@ function GameRow({ game, username, onDelete, onAnalyze, onReview, isAwaitingRevi
         </div>
 
         {/* Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
           {isAwaitingReview ? (
             <span style={{
               display: "flex", alignItems: "center", gap: "0.375rem",

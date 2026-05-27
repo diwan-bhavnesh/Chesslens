@@ -116,15 +116,17 @@ Post-opening positions (all moves)
       ↓ Chain model: eval_before = prev eval_after (1 Stockfish call/move, not 2)
       ↓ FEN deduplication + global eval cache (fen_eval_cache table, shared across ALL users)
 Cache miss positions only
-      ↓ Stockfish depth 5, single engine reused across games
+      ↓ Stockfish time-based search (0.05s/position), single engine reused across games
 ~13s for 66 games — accuracy stored per game in GameAnalysis
 ```
 
-**Accuracy formula:** Standard chess.com / Lichess win-probability formula. Confirmed calibrated at ~85% for 1608 ELO player — consistent with depth-12 individual analysis. Opening skip: first 10 half-moves (move_number ≤ 5) excluded from accuracy calculation in both bulk and individual pipelines.
+**Accuracy formula:** Standard chess.com / Lichess win-probability formula. Confirmed calibrated at ~85% for 1608 ELO player. Opening skip: first 10 half-moves (move_number ≤ 5) excluded from accuracy calculation in both bulk and individual pipelines.
 
 **Performance targets:**
 - Bulk (Layer 2): ~12s for 66 games, ~200s for 1000 games
-- Individual (Game Review): ~1s per game (chain model + chess.engine + depth 12)
+- Individual (Game Review): time-based 0.1s/position (chain model + chess.engine)
+
+> ⚠️ **Open point — Stockfish analysis depth:** Switched from fixed depth to time-based search (0.1s individual / 0.05s bulk) in Session 17. On Fly.io shared-cpu-1x, reaches ~depth 8-10. On performance CPU ($6/month extra), reaches ~depth 15+. If accuracy quality is insufficient, two options: (a) upgrade machine to performance-cpu-1x, (b) increase `STOCKFISH_MOVE_TIME` / `STOCKFISH_BULK_MOVE_TIME` env vars.
 
 ### Per-Game Review
 - Full board replay with FEN-based position rendering
@@ -137,7 +139,7 @@ Cache miss positions only
 - Keyboard navigation: ← → ↑ ↓
 - Flip board toggle + auto-orientation (board flips to user's colour on load)
 - Verbal move explanations: "Blunder — dropped 2.3 pawns. Best was Bb6."
-- Analysis gate: "Review" in My Games triggers depth-12 analysis first; navigates only when complete
+- Analysis gate: "Review" in My Games triggers individual Stockfish analysis first (0.1s/position, time-based); navigates only when complete
 - Claude narrative summary per game (requires Anthropic API credits)
 
 ---

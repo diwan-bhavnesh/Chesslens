@@ -35,7 +35,7 @@ def analyze_game(pgn_text: str) -> list[dict]:
             # Bootstrap: evaluate fen_before only for the very first move.
             # All subsequent moves reuse the previous position's eval_after.
             if prev_eval is None:
-                info_before = engine.analyse(board, chess.engine.Limit(depth=settings.STOCKFISH_DEPTH))
+                info_before = engine.analyse(board, chess.engine.Limit(time=settings.STOCKFISH_MOVE_TIME))
                 eval_before = _parse_score(info_before["score"])
             else:
                 eval_before = prev_eval
@@ -48,7 +48,7 @@ def analyze_game(pgn_text: str) -> list[dict]:
                 best_move_uci = None
             else:
                 # One search yields both eval and best move
-                info_after = engine.analyse(board, chess.engine.Limit(depth=settings.STOCKFISH_DEPTH))
+                info_after = engine.analyse(board, chess.engine.Limit(time=settings.STOCKFISH_MOVE_TIME))
                 eval_after = _parse_score(info_after["score"])
                 pv = info_after.get("pv")
                 best_move_uci = pv[0].uci() if pv else None

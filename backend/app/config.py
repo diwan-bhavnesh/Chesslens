@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str
 
     STOCKFISH_PATH: str = "/usr/local/bin/stockfish"
-    STOCKFISH_DEPTH: int = 18
-    STOCKFISH_BULK_DEPTH: int = 5
+    # Time-based search: adapts to CPU speed — faster hardware reaches higher depth automatically.
+    STOCKFISH_MOVE_TIME: float = 0.1    # seconds per position for individual game review
+    STOCKFISH_BULK_MOVE_TIME: float = 0.05  # seconds per position for bulk accuracy analysis
 
     CHESSCOM_BASE_URL: str = "https://api.chess.com/pub"
 
