@@ -5,7 +5,9 @@ from app.config import settings
 from app.database import Base, engine
 from app.routers import auth, games, analysis, users, profile
 
-Base.metadata.create_all(bind=engine)
+import os
+if os.getenv("APP_ENV", "development") == "development":
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Chesslens API", version="0.1.0")
 
