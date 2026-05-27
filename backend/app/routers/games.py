@@ -6,7 +6,7 @@ import uuid
 
 from app.database import get_db, SessionLocal
 from app.models.user import User
-from app.models.game import Game, ImportJob, PlayerProfile
+from app.models.game import Game, ImportJob, PlayerProfile, GameAnalysis, Move, BatchAnalysis
 from app.routers.deps import get_current_user
 from app.schemas.game import GameDetailOut, GameImportRequest, GameOut, ImportJobOut, PGNImportRequest
 from app.services import chesscom
@@ -59,8 +59,16 @@ def clear_all_games(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    db.query(Game).filter(Game.user_id == current_user.id).delete()
-    db.query(PlayerProfile).filter(PlayerProfile.user_id == current_user.id).delete()
+    # Delete in FK-safe order: children before parents.
+    # Bulk .delete() bypasses ORM cascades — Postgres enforces FK constraints
+    # so child rows must be removed explicitly before their parent game rows.
+    game_ids = [g.id for g in db.query(Game.id).filter(Game.user_id == current_user.id).all()]
+    if game_ids:
+        db.query(Move).filter(Move.game_id.in_(game_ids)).delete(synchronize_session=False)
+        db.query(GameAnalysis).filter(GameAnalysis.game_id.in_(game_ids)).delete(synchronize_session=False)
+    db.query(BatchAnalysis).filter(BatchAnalysis.user_id == current_user.id).delete(synchronize_session=False)
+    db.query(Game).filter(Game.user_id == current_user.id).delete(synchronize_session=False)
+    db.query(PlayerProfile).filter(PlayerProfile.user_id == current_user.id).delete(synchronize_session=False)
     db.commit()
 
 
