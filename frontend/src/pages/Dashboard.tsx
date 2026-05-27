@@ -379,6 +379,12 @@ const RatingChart = memo(function RatingChart({ profile }: { profile: PlayerProf
               <Tooltip
                 contentStyle={{ background: "#1A2E45", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#F5F0E8" }}
                 labelStyle={{ color: "#8FA3B8", fontSize: 12 }}
+                labelFormatter={(label) => {
+                  const [year, month] = String(label).split("-");
+                  const date = new Date(Number(year), Number(month) - 1);
+                  return date.toLocaleString("default", { month: "long", year: "numeric" });
+                }}
+                formatter={(value) => [value, "Rating"]}
               />
               <Line type="monotone" dataKey="elo" stroke="#D4A843" strokeWidth={2} dot={false} />
             </LineChart>
