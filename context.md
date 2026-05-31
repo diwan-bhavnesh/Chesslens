@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-27 — Session 17_
+_Last updated: 2026-05-31 — Session 18_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -25,6 +25,7 @@ _Last updated: 2026-05-27 — Session 17_
 | 15 | 2026-05-23 | Plan check + GitHub push + deployment plan | Confirmed all plan phases (3–4d) already implemented. Pushed Sessions 12–14 work to GitHub (commit a9f2c06). Removed stale root-level regression.md duplicate. Wrote complete production deployment plan (Fly.io + Vercel + Alembic + Postgres). |
 | 16 | 2026-05-24 | E2E test + polish + Review gate fixes | README updated with local setup guide. DEPLOYMENT.md added. E2E verified: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Layer 2 progress banner added. X-axis labels removed from charts. "Preparing..." spinner fixed (was disappearing mid-analysis). Poll interval reduced 3s → 1s. PRODUCT_TIMELINE.md created. |
 | 17 | 2026-05-27 | Production deployment + polish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme, FK-constraint clear-all, cold-start latency. Switched Stockfish to time-based search. Fixed CSS overlap. Fixed eval bar not flipping with board. Accuracy % now colored by outcome (green/white/red). Fixed board auto-orientation race condition. App shared with friends for feedback. |
+| 18 | 2026-05-31 | Architecture exploration — Lichess Cloud Eval | Explored Chess.com MCP servers — ruled out (thin REST wrappers, no new data). Discovered Lichess Cloud Eval API as a free pre-computed Stockfish eval database. Strategy: query Lichess first per FEN, fall back to local Stockfish on miss. Could dramatically reduce bulk analysis CPU time. Exploration in progress. |
 
 ---
 
@@ -98,6 +99,38 @@ _Last updated: 2026-05-27 — Session 17_
 ---
 
 ## Session Decisions Log
+
+### Session 18 (2026-05-31) — Architecture Exploration: Lichess Cloud Eval
+
+**Exploration: Can MCP servers or external APIs speed up bulk analysis?**
+
+**Investigated:**
+1. **Chess.com MCP servers** (`pab1it0/chess-mcp`, `SalvatoreDiPalo/chess-mcp-server`) — ruled out. Both are thin wrappers around the Chess.com public REST API. No new data, no engine analysis, no speed benefit.
+2. **Chess.com pre-computed accuracy** — ruled out. The `accuracies.white/black` field in Chess.com's JSON only exists for games the user manually reviewed on Chess.com. Coverage too low to be useful at scale.
+
+**New option identified: Lichess Cloud Eval API**
+
+Lichess maintains a public database of pre-computed Stockfish evaluations for chess positions — built from millions of games analyzed on Lichess.
+
+- Endpoint: `GET https://lichess.org/api/cloud-eval?fen=<FEN>&multiPv=1`
+- Free, no auth, no rate-limit key required for reasonable use
+- Returns: eval (centipawns), best move (UCI), depth (typically 25–40+)
+- Coverage: highest for common positions (opening theory, main lines); lower for unusual middlegame/endgame positions
+- Quality: far deeper than our 0.05s local Stockfish (~depth 8–10 on shared CPU)
+
+**Proposed strategy:**
+- In `bulk_analysis.py → _get_or_cache_eval()`: query Lichess Cloud Eval first
+- On hit → use the eval, store in `FenEvalCache`, skip local Stockfish entirely
+- On miss → fall back to local Stockfish as today
+- `FenEvalCache` already exists and is shared across all users — Lichess hits cached permanently
+
+**Status:** Exploration in progress. Next step: measure real coverage on production game data before implementing.
+
+**Files that would change:** `backend/app/services/bulk_analysis.py`, `backend/app/config.py` (optional rate-limit config)
+
+**Open question:** What % of FENs in a typical user's game history are covered by Lichess Cloud Eval? Need to sample before committing.
+
+---
 
 ### Session 17 (2026-05-27) — Production Deployment + Time-based Stockfish
 
@@ -323,11 +356,11 @@ See previous context entries.
 
 ---
 
-## What's Next — Session 17
+## What's Next — Session 18
 
-**Start here:**
+**In progress:**
 
-1. **Execute deployment plan** — three open decisions to make first: custom domain vs subdomains, machine size (`performance-1x` vs `shared-cpu-1x`), Fly.io region (Singapore recommended). Plan file: `.claude/plans/frolicking-zooming-pearl.md`.
+1. **Lichess Cloud Eval integration** — measure real FEN coverage on production data, then implement as fast-path in `bulk_analysis.py`. Goal: reduce Layer 2 bulk analysis time by using Lichess's pre-computed evals instead of local Stockfish wherever possible.
 
 2. **Playing Style & Coaching** — restore once Anthropic credits topped up (console.anthropic.com).
 

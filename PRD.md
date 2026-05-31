@@ -128,7 +128,7 @@ Cache miss positions only
 - Bulk (Layer 2): ~12s for 66 games, ~200s for 1000 games
 - Individual (Game Review): time-based 0.1s/position (chain model + chess.engine)
 
-> ⚠️ **Open point — Stockfish analysis depth:** Switched from fixed depth to time-based search (0.1s individual / 0.05s bulk) in Session 17. On Fly.io shared-cpu-1x, reaches ~depth 8-10. On performance CPU ($6/month extra), reaches ~depth 15+. If accuracy quality is insufficient, two options: (a) upgrade machine to performance-cpu-1x, (b) increase `STOCKFISH_MOVE_TIME` / `STOCKFISH_BULK_MOVE_TIME` env vars.
+> ⚠️ **Open point — Stockfish analysis speed:** Switched from fixed depth to time-based search (0.1s individual / 0.05s bulk) in Session 17. On Fly.io shared-cpu-1x, reaches ~depth 8-10. Three options to go faster: (a) upgrade machine to performance-cpu-1x ($6/month), (b) increase `STOCKFISH_MOVE_TIME` / `STOCKFISH_BULK_MOVE_TIME`, (c) **Lichess Cloud Eval integration** — query `https://lichess.org/api/cloud-eval?fen=<FEN>` before running local Stockfish; use the pre-computed result (depth 25–40+) on hit, fall back to local Stockfish on miss. Option (c) is currently being explored (Session 18).
 
 ### Per-Game Review
 - Full board replay with FEN-based position rendering
@@ -284,4 +284,5 @@ Cache miss positions only
 | 🔵 Future | React Native mobile app |
 | 🔵 Future | Opening explorer |
 | 🔵 Future | Game comparison / social sharing |
+| 🟡 Medium | Lichess Cloud Eval integration — pre-computed Stockfish evals as fast-path in bulk analysis; falls back to local Stockfish on miss. Coverage TBD. |
 | 🔵 Future | Post-MVP: replace Stockfish bulk with Maia-style batch neural net (<30s target) |
