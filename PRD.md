@@ -128,7 +128,7 @@ Cache miss positions only
 - Bulk (Layer 2): ~12s for 66 games, ~200s for 1000 games
 - Individual (Game Review): time-based 0.1s/position (chain model + chess.engine)
 
-> ⚠️ **Open point — Stockfish analysis speed:** Switched from fixed depth to time-based search (0.1s individual / 0.05s bulk) in Session 17. On Fly.io shared-cpu-1x, reaches ~depth 8-10. Three options to go faster: (a) upgrade machine to performance-cpu-1x ($6/month), (b) increase `STOCKFISH_MOVE_TIME` / `STOCKFISH_BULK_MOVE_TIME`, (c) **Lichess Cloud Eval integration** — query `https://lichess.org/api/cloud-eval?fen=<FEN>` before running local Stockfish; use the pre-computed result (depth 25–40+) on hit, fall back to local Stockfish on miss. Option (c) is currently being explored (Session 18).
+> ⚠️ **Open point — Stockfish analysis speed:** Switched from fixed depth to time-based search (0.1s individual / 0.05s bulk) in Session 17. On Fly.io shared-cpu-1x, reaches ~depth 8-10. **Chosen solution: Lichess Cloud Eval integration (option c)** — "Harvest Before You Need It" architecture designed in Session 19. Silent harvest pipeline fires on import; accuracy computation becomes pure DB reads. Parallel batching (50 concurrent requests). Position classification: moves 1–25 → Lichess first, moves 25+ → local Stockfish. Quality on hits: depth 25–40 (vs current ~8–10). Architecture complete — pending coverage measurement before implementation.
 
 ### Per-Game Review
 - Full board replay with FEN-based position rendering
@@ -284,5 +284,5 @@ Cache miss positions only
 | 🔵 Future | React Native mobile app |
 | 🔵 Future | Opening explorer |
 | 🔵 Future | Game comparison / social sharing |
-| 🟡 Medium | Lichess Cloud Eval integration — pre-computed Stockfish evals as fast-path in bulk analysis; falls back to local Stockfish on miss. Coverage TBD. |
+| 🟡 Medium | Lichess Cloud Eval integration — "Harvest Before You Need It" architecture. Silent harvest on import (parallel batching, 50 concurrent requests). Two pipelines: Pipeline A harvests evals into fen_eval_cache; Pipeline B computes accuracy as pure DB reads. Position classification by move number (moves 1–25 → Lichess, moves 25+ → local Stockfish). Fallback to local Stockfish always guaranteed. Quality: depth 25–40 on hits vs current depth ~8–10. Architecture fully designed (Session 19). Next step: coverage measurement. |
 | 🔵 Future | Post-MVP: replace Stockfish bulk with Maia-style batch neural net (<30s target) |

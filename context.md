@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-05-31 — Session 18_
+_Last updated: 2026-06-11 — Session 19_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -26,6 +26,7 @@ _Last updated: 2026-05-31 — Session 18_
 | 16 | 2026-05-24 | E2E test + polish + Review gate fixes | README updated with local setup guide. DEPLOYMENT.md added. E2E verified: Google OAuth → import → profile → Game Review. Fixed My Games 200-game cap (→ 5000). Layer 2 progress banner added. X-axis labels removed from charts. "Preparing..." spinner fixed (was disappearing mid-analysis). Poll interval reduced 3s → 1s. PRODUCT_TIMELINE.md created. |
 | 17 | 2026-05-27 | Production deployment + polish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme, FK-constraint clear-all, cold-start latency. Switched Stockfish to time-based search. Fixed CSS overlap. Fixed eval bar not flipping with board. Accuracy % now colored by outcome (green/white/red). Fixed board auto-orientation race condition. App shared with friends for feedback. |
 | 18 | 2026-05-31 | Architecture exploration — Lichess Cloud Eval | Explored Chess.com MCP servers — ruled out (thin REST wrappers, no new data). Discovered Lichess Cloud Eval API as a free pre-computed Stockfish eval database. Strategy: query Lichess first per FEN, fall back to local Stockfish on miss. Could dramatically reduce bulk analysis CPU time. Exploration in progress. |
+| 19 | 2026-06-11 | Lichess Cloud Eval — full architecture designed | Full "Harvest Before You Need It" architecture designed. Two-pipeline approach: Pipeline A (silent harvest on import) + Pipeline B (accuracy computation = pure DB reads). Parallel batching (50 concurrent Lichess requests). Position classification by move number. Network effect: cache warms across all users. Full user journey documented. No code written — design phase complete. |
 
 ---
 
@@ -99,6 +100,57 @@ _Last updated: 2026-05-31 — Session 18_
 ---
 
 ## Session Decisions Log
+
+### Session 19 (2026-06-11) — Lichess Cloud Eval: Full Architecture Design
+
+**Theme:** No code written. Full architecture designed and documented.
+
+**Key decisions:**
+
+1. **"Harvest Before You Need It" pattern adopted**
+   - Decouple eval harvesting from accuracy computation entirely
+   - Silent background harvest triggers immediately after import completes — user never waits
+   - By the time user clicks "Build Profile", all evals already in `fen_eval_cache`
+   - Layer 2 accuracy becomes pure DB reads → seconds instead of minutes
+
+2. **Two-pipeline architecture**
+   - **Pipeline A (Harvest):** fires on import → extracts FENs → checks cache → queries Lichess in parallel → falls back to local Stockfish for misses → stores everything in `fen_eval_cache`
+   - **Pipeline B (Compute):** fires on "Build Profile" → reads from `fen_eval_cache` → computes accuracy → no Stockfish needed
+
+3. **Parallel batching strategy confirmed**
+   - 50 concurrent Lichess requests per batch
+   - ~14,000 opening/mid positions queried to Lichess → ~280 batches × 200ms = ~56s
+   - Late game positions (move 25+) go directly to local Stockfish — low Lichess coverage
+   - Total first-run harvest: ~2 min (user reads Layer 1 profile during this time)
+
+4. **Position classification by move number**
+   - Moves 1–25: HIGH Lichess coverage → query Lichess first
+   - Moves 25+: LOW coverage → skip Lichess, go straight to local Stockfish
+   - Reduces wasted API calls on positions Lichess almost certainly doesn't have
+
+5. **Network effect confirmed**
+   - `fen_eval_cache` is shared across all users
+   - Every user's games warm the cache for everyone else
+   - Opening positions (most common) filled after first few users — zero Lichess/Stockfish for those forever
+
+6. **Fallback guarantee**
+   - Lichess down or rate-limited → local Stockfish handles everything
+   - Worst case = exactly today's experience. No degraded state.
+
+7. **Quality improvement**
+   - Lichess hits: depth 25–40 (vs current depth ~8–10 on shared CPU)
+   - Better blunder/mistake classification — fewer false positives
+   - Free — no infra cost change
+
+**Files that will change (when implementation begins):**
+- `backend/app/services/bulk_analysis.py` — add harvest pipeline + Lichess lookup before Stockfish
+- `backend/app/routers/games.py` — trigger harvest job after import completes
+- `backend/app/config.py` — optional Lichess rate-limit config
+- `backend/app/services/lichess_eval.py` — new service (parallel Lichess fetcher)
+
+**Status:** Architecture complete. Next step: measure real FEN coverage on production data before writing code.
+
+---
 
 ### Session 18 (2026-05-31) — Architecture Exploration: Lichess Cloud Eval
 
@@ -356,13 +408,17 @@ See previous context entries.
 
 ---
 
-## What's Next — Session 18
+## What's Next — Session 20
 
-**In progress:**
+**Immediate (do before any code):**
 
-1. **Lichess Cloud Eval integration** — measure real FEN coverage on production data, then implement as fast-path in `bulk_analysis.py`. Goal: reduce Layer 2 bulk analysis time by using Lichess's pre-computed evals instead of local Stockfish wherever possible.
+1. **Top up Anthropic API credits** — console.anthropic.com. Playing Style + Coaching sections blank for all users. No code change needed.
 
-2. **Playing Style & Coaching** — restore once Anthropic credits topped up (console.anthropic.com).
+2. **Lichess Cloud Eval — coverage measurement** — sample real FENs from production game data against the Lichess API. Confirm hit rate before committing to implementation. Architecture is fully designed (see Session 19 decisions log).
+
+**Ready to implement (architecture complete):**
+
+3. **Lichess Cloud Eval integration** — "Harvest Before You Need It" pattern. Two pipelines: silent harvest on import + accuracy computation as pure DB reads. Full design in Session 19 decisions log. Files: `bulk_analysis.py`, `games.py`, `lichess_eval.py` (new), `config.py`.
 
 **Backlog (no session assigned yet):**
 - Mobile responsiveness
