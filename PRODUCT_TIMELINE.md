@@ -1,6 +1,6 @@
 # Chesslens — Product Timeline
 
-> Built from scratch to a feature-complete MVP in 16 sessions across two weeks (May 10–24, 2026).
+> Built from scratch to a production-deployed MVP in 17 sessions (May 10 – May 27, 2026). Now evolving toward an LLM-powered chess recommendation engine.
 
 ---
 
@@ -18,6 +18,9 @@
 | Game Review gate | May 23 | "Preparing..." blocks navigation until depth-12 analysis completes |
 | Analysis speed | May 23 | 15–40s per game → ~1s per game |
 | MVP ready | May 24 | E2E tested end-to-end; 117/117 regression checks; deployment plan drafted |
+| Production live | May 27 | Fly.io + Vercel deployed; Postgres migration; real users onboarded |
+| Reliability fix | Jun 14 | Stuck analysis auto-reset shipped; 121/121 regression checks |
+| LLM direction decided | Jun 14 | Lichess Cloud Eval cancelled (15.5% coverage); LLM recommendation engine adopted as the product direction |
 
 ---
 
@@ -148,6 +151,47 @@ README updated with step-by-step local setup guide. `DEPLOYMENT.md` added. End-t
 
 ---
 
+### Session 17 · May 27 · Production Deployment
+
+Full production deployment:
+- **Backend:** Fly.io with Docker + Stockfish via apt-get. Alembic baseline migration (9 tables). Fly Postgres attached.
+- **Frontend:** Vercel with SPA routing. Google OAuth updated for production URLs.
+- **Stockfish:** switched from fixed depth to time-based search (`0.1s` individual, `0.05s` bulk) — adapts to CPU speed automatically.
+
+Bugs fixed post-deploy: eval bar not flipping with board orientation, accuracy % now colored by outcome (green/white/red), board orientation race condition resolved.
+
+---
+
+### Sessions 18–19 · May 31 – Jun 11 · Lichess Cloud Eval Exploration
+
+Explored using Lichess's free pre-computed Stockfish database to speed up bulk analysis. Full "Harvest Before You Need It" architecture designed: silent harvest after import warms the `fen_eval_cache`, Layer 2 becomes pure DB reads in seconds.
+
+No code written — coverage measurement run first per plan.
+
+---
+
+### Session 20 · Jun 14 · Stuck Analysis Fix
+
+Bulk accuracy analysis stuck on production for a 205-game import after a Fly.io machine restart killed the background task mid-run.
+
+Two-part fix:
+1. Heartbeat: stamp `profile.updated_at` every 10 games in Layer 2
+2. Staleness check on `GET /profile/me` resets both stuck-running AND stuck-done states after 5 minutes of no heartbeat
+
+Deployed to production. 121/121 regression suite.
+
+---
+
+### Session 21 · Jun 14 · Lichess Coverage Gate + LLM Direction Pivot
+
+Coverage gate run against 532 local games: Lichess Cloud Eval hit rate was 52% for moves 6–10, 10% for moves 11–15, 0% beyond. Overall 15.5% — too low for the harvest architecture to deliver its promised speedup.
+
+**Lichess integration cancelled.**
+
+New product direction decided: **LLM-powered chess recommendation engine.** Instead of centipawn accuracy, analyze patterns across games and generate coach-style insights. Learning path: local Ollama first → production API (Claude Haiku or Gemini Flash).
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | What Was Chosen | Why |
@@ -179,5 +223,103 @@ README updated with step-by-step local setup guide. `DEPLOYMENT.md` added. End-t
 | Production deployment plan | ✅ Drafted (see DEPLOYMENT.md) |
 | Deployed to production | Pending |
 | AI layer (Playing Style, Coaching, per-game summary) | Pending API credits |
+| LLM recommendation engine | In progress — see learning path below |
 | Mobile responsiveness | Pending |
 | React Native app | Future |
+
+---
+
+## LLM Recommendation Engine — Learning Path
+
+_Started: 2026-06-14_
+
+### Why
+
+Chesslens started as an accuracy engine. Accuracy % tells you how well you played — it doesn't tell you what to fix. The next evolution is a personal chess coach: analyze patterns across all your games and tell you exactly what to work on.
+
+**Accuracy engine:** "You played at 78% accuracy."
+**Recommendation engine:** "You lose 70% of games that reach move 40+. Your endgame accuracy is 61% vs 76% middlegame. Start with rook and pawn endings."
+
+### Approach
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 — Local LLM | Run Ollama on Mac. Experiment with data formats and prompts. Zero cost, fast iteration. | Up next |
+| 2 — Integrate into app | Wire recommendation service into backend + new dashboard section. | Pending |
+| 3 — Production API | Same prompt, same output — switch config to Claude Haiku or Gemini Flash. | Pending |
+
+### Local Setup (Phase 1)
+
+```bash
+brew install ollama
+ollama pull llama3.1:8b   # ~4.7GB download
+ollama serve              # API at http://localhost:11434
+```
+
+Ollama exposes an OpenAI-compatible API. The same client code works for local Ollama and any production API — only the `base_url`, `api_key`, and `model` change in config.
+
+### What the LLM Receives
+
+Structured summary extracted from existing `PlayerProfile` data — not raw PGNs:
+
+```json
+{
+  "rating": 1420,
+  "phase_accuracy": { "opening": 84, "middlegame": 76, "endgame": 61 },
+  "openings_as_black": [
+    { "name": "French Defense", "games": 40, "win_rate": 22 },
+    { "name": "Sicilian Defense", "games": 60, "win_rate": 35 }
+  ],
+  "game_length": {
+    "under_30_moves": { "games": 80, "win_rate": 68 },
+    "over_50_moves": { "games": 35, "win_rate": 29 }
+  },
+  "time_pressure_accuracy_drop": 15
+}
+```
+
+All of this already exists in `PlayerProfile`. No new Stockfish computation required.
+
+### Output Format
+
+```json
+{
+  "summary": "Tactical player who wins short games but struggles in long technical battles.",
+  "weaknesses": [
+    {
+      "area": "Endgame",
+      "evidence": "61% endgame accuracy vs 76% middlegame; 70% loss rate in games over 50 moves",
+      "recommendation": "Practice rook and pawn endgames — specifically up-a-pawn positions.",
+      "priority": "high"
+    }
+  ],
+  "strengths": ["Sharp tactical play", "Strong opening preparation as White"],
+  "focus_this_week": "Rook and pawn endgames — 3 of your last 5 losses were drawn positions you failed to convert."
+}
+```
+
+### Quality Bar
+
+A recommendation is good if a chess coach would say it — specific, grounded in the player's actual data, actionable.
+
+| | Bad | Good |
+|-|-----|------|
+| Endgame | "Improve your endgame." | "Your endgame accuracy is 61%. You're losing won positions after move 40. Study Silman's Complete Endgame Course — rook endings first." |
+| Openings | "Play different openings." | "French Defense win rate: 22% over 40 games. At 1420 ELO, the Caro-Kann gives you similar structure with fewer theoretical pitfalls." |
+
+### Experiments Log
+
+| # | Date | Model | What changed | Finding |
+|---|------|-------|-------------|---------|
+| 1 | TBD | llama3.1:8b | Baseline prompt v1 | TBD |
+
+### Production API Options
+
+| Option | Cost/profile | Monthly (100 users) | Notes |
+|--------|-------------|---------------------|-------|
+| Ollama local (dev only) | $0 | $0 | Mac only, not for production |
+| Claude Haiku 4.5 | ~$0.003 | ~$0.30 | Already integrated |
+| Gemini 2.0 Flash | ~$0.001 | ~$0.10 | Cheapest; 1M token context |
+| Claude Sonnet 4.6 | ~$0.03 | ~$3.00 | Best quality |
+
+**Target for production:** Gemini 2.0 Flash — cheapest viable option with large enough context to send full game summaries.
