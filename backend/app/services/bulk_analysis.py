@@ -232,6 +232,7 @@ def bulk_analyze_games(user_id: str, db: Session, profile: PlayerProfile) -> Non
             profile.games_done = i + 1
             if (i + 1) % 10 == 0:
                 try:
+                    profile.updated_at = datetime.utcnow()
                     db.commit()
                 except Exception:
                     db.rollback()

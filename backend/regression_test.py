@@ -466,6 +466,39 @@ if r17_game_id:
 # Clean up after Section 17
 requests.delete(f"{BASE}/games/all", headers=hdrs)
 
+# ── 18. Stale running profile auto-reset ─────────────────────────────────────
+section("18. Stale running profile — auto-reset to pending")
+
+# Re-import a game and create a profile to have a profile row
+r18_pgn = requests.post(f"{BASE}/games/import/pgn", headers=hdrs, json={"pgn": SAMPLE_PGN})
+check("Section 18 PGN import → 201", r18_pgn.status_code == 201)
+
+r18_create = requests.post(f"{BASE}/profile/create", headers=hdrs)
+check("Section 18 profile create → 202 or 409", r18_create.status_code in (202, 409))
+
+# Wait briefly so the profile row is committed
+time.sleep(2)
+
+# Directly set profile status = 'running' and updated_at = 10 min ago in DB
+conn18 = sqlite3.connect(db_path)
+conn18.execute(
+    "UPDATE player_profiles SET status = 'running', updated_at = datetime('now', '-10 minutes') "
+    "WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+    (EMAIL,)
+)
+conn18.commit()
+conn18.close()
+
+# GET /profile/me should detect staleness and reset to pending
+r18_me = requests.get(f"{BASE}/profile/me", headers=hdrs)
+check("GET /profile/me → 200", r18_me.status_code == 200, f"got {r18_me.status_code}")
+if r18_me.status_code == 200:
+    check("Stale running status auto-reset to pending", r18_me.json().get("status") == "pending",
+          f"got {r18_me.json().get('status')}")
+
+# Cleanup
+requests.delete(f"{BASE}/games/all", headers=hdrs)
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 total = passed + failed
 print(f"\n{'═'*52}")

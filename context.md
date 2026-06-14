@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-06-11 — Session 19_
+_Last updated: 2026-06-14 — Session 20_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -27,6 +27,7 @@ _Last updated: 2026-06-11 — Session 19_
 | 17 | 2026-05-27 | Production deployment + polish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme, FK-constraint clear-all, cold-start latency. Switched Stockfish to time-based search. Fixed CSS overlap. Fixed eval bar not flipping with board. Accuracy % now colored by outcome (green/white/red). Fixed board auto-orientation race condition. App shared with friends for feedback. |
 | 18 | 2026-05-31 | Architecture exploration — Lichess Cloud Eval | Explored Chess.com MCP servers — ruled out (thin REST wrappers, no new data). Discovered Lichess Cloud Eval API as a free pre-computed Stockfish eval database. Strategy: query Lichess first per FEN, fall back to local Stockfish on miss. Could dramatically reduce bulk analysis CPU time. Exploration in progress. |
 | 19 | 2026-06-11 | Lichess Cloud Eval — full architecture designed | Full "Harvest Before You Need It" architecture designed. Two-pipeline approach: Pipeline A (silent harvest on import) + Pipeline B (accuracy computation = pure DB reads). Parallel batching (50 concurrent Lichess requests). Position classification by move number. Network effect: cache warms across all users. Full user journey documented. No code written — design phase complete. |
+| 20 | 2026-06-14 | Diagnosis — stuck bulk analysis on production | Bulk accuracy analysis stuck on production for a 205-game import. Root cause: Fly.io machine restart killed the background task mid-run, leaving profile.status = 'running' with nothing behind it. Fix: POST /profile/rebuild (force=True). No code written. Confirmed Lichess Cloud Eval as the permanent fix — bulk accuracy becomes pure DB reads, eliminating this class of bug. |
 
 ---
 
@@ -408,7 +409,7 @@ See previous context entries.
 
 ---
 
-## What's Next — Session 20
+## What's Next — Session 21
 
 **Immediate (do before any code):**
 
@@ -418,7 +419,7 @@ See previous context entries.
 
 **Ready to implement (architecture complete):**
 
-3. **Lichess Cloud Eval integration** — "Harvest Before You Need It" pattern. Two pipelines: silent harvest on import + accuracy computation as pure DB reads. Full design in Session 19 decisions log. Files: `bulk_analysis.py`, `games.py`, `lichess_eval.py` (new), `config.py`.
+3. **Lichess Cloud Eval integration** — "Harvest Before You Need It" pattern. Two pipelines: silent harvest on import + accuracy computation as pure DB reads. Full design in Session 19 decisions log. Files: `bulk_analysis.py`, `games.py`, `lichess_eval.py` (new), `config.py`. **This also eliminates the stuck-analysis bug (Session 20) — no more long-running background Stockfish tasks.**
 
 **Backlog (no session assigned yet):**
 - Mobile responsiveness

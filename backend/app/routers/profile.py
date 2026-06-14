@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -90,4 +90,10 @@ def get_profile(
     profile = db.query(PlayerProfile).filter(PlayerProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="No profile found — trigger a rebuild first")
+    if profile.status == "running":
+        age = datetime.utcnow() - profile.updated_at
+        if age > timedelta(minutes=5):
+            profile.status = "pending"
+            profile.updated_at = datetime.utcnow()
+            db.commit()
     return profile
