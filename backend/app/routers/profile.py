@@ -90,10 +90,19 @@ def get_profile(
     profile = db.query(PlayerProfile).filter(PlayerProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="No profile found — trigger a rebuild first")
-    if profile.status == "running":
-        age = datetime.utcnow() - profile.updated_at
-        if age > timedelta(minutes=5):
-            profile.status = "pending"
-            profile.updated_at = datetime.utcnow()
-            db.commit()
+    age = datetime.utcnow() - profile.updated_at
+    stale = age > timedelta(minutes=5)
+    if profile.status == "running" and stale:
+        profile.status = "pending"
+        profile.updated_at = datetime.utcnow()
+        db.commit()
+    elif (
+        profile.status == "done"
+        and profile.accuracy_history is None
+        and profile.games_total is not None
+        and stale
+    ):
+        profile.status = "pending"
+        profile.updated_at = datetime.utcnow()
+        db.commit()
     return profile
