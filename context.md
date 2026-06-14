@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-06-14 — Session 20_
+_Last updated: 2026-06-14 — Session 21_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -27,7 +27,8 @@ _Last updated: 2026-06-14 — Session 20_
 | 17 | 2026-05-27 | Production deployment + polish | Full Fly.io + Vercel deployment. DB reset to Postgres (Alembic migrations). Fixed postgres:// URL scheme, FK-constraint clear-all, cold-start latency. Switched Stockfish to time-based search. Fixed CSS overlap. Fixed eval bar not flipping with board. Accuracy % now colored by outcome (green/white/red). Fixed board auto-orientation race condition. App shared with friends for feedback. |
 | 18 | 2026-05-31 | Architecture exploration — Lichess Cloud Eval | Explored Chess.com MCP servers — ruled out (thin REST wrappers, no new data). Discovered Lichess Cloud Eval API as a free pre-computed Stockfish eval database. Strategy: query Lichess first per FEN, fall back to local Stockfish on miss. Could dramatically reduce bulk analysis CPU time. Exploration in progress. |
 | 19 | 2026-06-11 | Lichess Cloud Eval — full architecture designed | Full "Harvest Before You Need It" architecture designed. Two-pipeline approach: Pipeline A (silent harvest on import) + Pipeline B (accuracy computation = pure DB reads). Parallel batching (50 concurrent Lichess requests). Position classification by move number. Network effect: cache warms across all users. Full user journey documented. No code written — design phase complete. |
-| 20 | 2026-06-14 | Diagnosis — stuck bulk analysis on production | Bulk accuracy analysis stuck on production for a 205-game import. Root cause: Fly.io machine restart killed the background task mid-run, leaving profile.status = 'running' with nothing behind it. Fix: POST /profile/rebuild (force=True). No code written. Confirmed Lichess Cloud Eval as the permanent fix — bulk accuracy becomes pure DB reads, eliminating this class of bug. |
+| 20 | 2026-06-14 | Stuck analysis fix + deploy | Fly.io machine restart killed bulk analysis mid-run. Two-part fix: (1) heartbeat stamp `profile.updated_at` every 10 games, (2) staleness check on GET /profile/me resets both stuck-running AND stuck-done states. Deployed to production. 121/121 regression suite. |
+| 21 | 2026-06-14 | Lichess coverage gate + LLM direction pivot | Coverage gate run: Lichess Cloud Eval hit rate is 52% for moves 6–10, 10% for moves 11–15, 0% beyond. Overall 15.5% — too low to justify the harvest architecture. Lichess integration cancelled. New direction under exploration: LLM-powered pattern analysis + recommendation engine (replace Stockfish accuracy with coach-style insights). Session ended in planning. |
 
 ---
 
@@ -101,6 +102,63 @@ _Last updated: 2026-06-14 — Session 20_
 ---
 
 ## Session Decisions Log
+
+### Session 21 (2026-06-14) — Lichess Coverage Gate + LLM Direction Pivot
+
+**Theme:** Coverage gate ran, Lichess integration cancelled, new direction identified.
+
+**Key findings:**
+
+1. **Lichess Cloud Eval coverage is insufficient for Chess.com games**
+   - Coverage measurement script (`backend/measure_lichess_coverage.py`) ran against 532 local games, 50 FENs per bucket
+   - Moves 6–10: 52% hit rate, avg depth 36.4
+   - Moves 11–15: 10% hit rate
+   - Moves 16–25: 0% hit rate
+   - Overall: 15.5% hit rate — well below the 70–80% assumed in the architecture plan
+   - Root cause: Lichess's cloud eval database is built from Lichess games. Chess.com players follow standard opening theory for ~10 moves, then diverge into positions Lichess has never seen.
+
+2. **Lichess Cloud Eval integration is CANCELLED**
+   - The harvest architecture only makes sense with high overall coverage
+   - At 15.5% hit rate, Lichess would cover ~5–6 positions per game (8% of evaluated positions)
+   - Raising `STOCKFISH_BULK_MOVE_TIME` would make Layer 2 slower, not faster, at this coverage
+   - The stuck-analysis bug class is not eliminated — Layer 2 still runs 3–5 min
+   - The staleness auto-reset (deployed in Session 20) remains as primary protection
+
+3. **New direction: LLM-powered recommendation engine**
+   - Goal: move beyond centipawn accuracy % toward coach-style pattern analysis
+   - Examples: "You collapse in endgames" / "Your French Defense win rate is 22% — consider switching" / "You lose 70% of games reaching move 40+"
+   - This is pattern recognition across games, not position-by-position eval — LLMs are well-suited for this
+   - Key open question: replace Stockfish accuracy entirely, or keep it and add recommendations on top?
+   - Key open question: use existing Claude API with richer data, a cheaper API (Gemini Flash), or self-hosted Ollama?
+   - Session ended mid-planning — direction not yet locked
+
+**Files added this session:**
+- `backend/measure_lichess_coverage.py` — coverage diagnostic script (kept for reference)
+
+**No code changed in the main application.**
+
+---
+
+### Session 20 (2026-06-14) — Stuck Bulk Analysis Fix + Deploy
+
+**Theme:** Diagnosis and fix for bulk accuracy analysis stuck on production.
+
+**Root cause (two-stage):**
+1. `profile.updated_at` was never stamped during Layer 2 — staleness detector had no reliable timestamp
+2. Staleness check only monitored `status == "running"`, but `build_profile()` sets `status = "done"` after Layer 1 (before Layer 2 runs) — so when the machine died during Layer 2, the staleness check never fired
+
+**Fixes:**
+1. `bulk_analysis.py`: stamp `profile.updated_at = datetime.utcnow()` in the 10-game heartbeat commit block
+2. `profile.py` GET /profile/me: extended staleness check with second branch — resets `status = "pending"` when `status == "done" AND accuracy_history is None AND games_total is not None AND stale`
+
+**Files changed:**
+- `backend/app/services/bulk_analysis.py` — heartbeat stamp
+- `backend/app/routers/profile.py` — staleness check extended
+- `backend/regression_test.py` — Section 18 (staleness reset test, ~33 lines)
+
+**Deployed:** Both fixes to Fly.io. 121/121 regression suite passing. Commits: `d91aeda`, `e288cf1`.
+
+---
 
 ### Session 19 (2026-06-11) — Lichess Cloud Eval: Full Architecture Design
 
@@ -409,21 +467,27 @@ See previous context entries.
 
 ---
 
-## What's Next — Session 21
+## What's Next — Session 22
 
-**Immediate (do before any code):**
+**Active decision (must resolve before coding):**
 
-1. **Top up Anthropic API credits** — console.anthropic.com. Playing Style + Coaching sections blank for all users. No code change needed.
+1. **LLM-powered recommendation engine — direction to lock**
+   - Replace or augment Stockfish accuracy %?
+     - Option A: Keep Stockfish (accuracy % stays) + add LLM pattern recommendations on top
+     - Option B: Replace Stockfish with LLM qualitative labels (eliminates stuck-analysis bug class)
+   - Which LLM infrastructure?
+     - Claude API (already wired, richest quality, small cost ~$0.01–0.05/profile)
+     - Gemini Flash / Mistral API (very cheap, good enough for structured recommendations)
+     - Ollama self-hosted (zero cost, needs bigger Fly.io machine ~$10–20/mo)
+   - What specific recommendations should be shown to users?
+     - Examples to define: opening advice, game phase weakness, endgame gap, time pressure patterns
 
-2. **Lichess Cloud Eval — coverage measurement** — sample real FENs from production game data against the Lichess API. Confirm hit rate before committing to implementation. Architecture is fully designed (see Session 19 decisions log).
-
-**Ready to implement (architecture complete):**
-
-3. **Lichess Cloud Eval integration** — "Harvest Before You Need It" pattern. Two pipelines: silent harvest on import + accuracy computation as pure DB reads. Full design in Session 19 decisions log. Files: `bulk_analysis.py`, `games.py`, `lichess_eval.py` (new), `config.py`. **This also eliminates the stuck-analysis bug (Session 20) — no more long-running background Stockfish tasks.**
+**Cancelled — do not revisit without new data:**
+- ~~Lichess Cloud Eval integration~~ — coverage too low (15.5%) for Chess.com games
 
 **Backlog (no session assigned yet):**
+- Frontend graceful error handling improvements (parked Session 21)
 - Mobile responsiveness
-- SaaS deployment (Fly.io + Postgres migration) — **plan drafted, ready to execute**
 - User-facing onboarding flow
 - React Native mobile app
 
