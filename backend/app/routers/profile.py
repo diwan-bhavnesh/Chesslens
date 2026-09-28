@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.game import PlayerProfile
 from app.models.user import User
 from app.routers.deps import get_current_user
-from app.services.profile import build_profile
+from app.services.profile import build_profile, compute_chess_username
 
 router = APIRouter()
 
@@ -18,6 +18,7 @@ class PlayerProfileOut(BaseModel):
     id: str
     user_id: str
     status: str
+    player_name: Optional[str] = None
     rating_history: Optional[list[Any]] = None
     accuracy_history: Optional[list[Any]] = None
     phase_accuracy: Optional[dict[str, Any]] = None
@@ -60,6 +61,7 @@ def _upsert_and_trigger(db: Session, user_id: str, background_tasks: BackgroundT
     db.commit()
     db.refresh(profile)
     background_tasks.add_task(build_profile, user_id)
+    profile.player_name = compute_chess_username(user_id, db)
     return profile
 
 
@@ -105,4 +107,5 @@ def get_profile(
         profile.status = "pending"
         profile.updated_at = datetime.utcnow()
         db.commit()
+    profile.player_name = compute_chess_username(current_user.id, db)
     return profile

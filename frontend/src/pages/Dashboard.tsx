@@ -889,7 +889,11 @@ export function Dashboard() {
             background: "linear-gradient(135deg, #F5F0E8 0%, #D4A843 100%)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
           }}>
-            {user?.email ? `${user.email.split("@")[0]}'s Profile` : "Chess Profile"}
+            {profile?.player_name
+              ? `${profile.player_name}'s Profile`
+              : user?.email
+              ? `${user.email.split("@")[0]}'s Profile`
+              : "Chess Profile"}
           </h1>
           {hasGames && (
             <p style={{ fontSize: "0.875rem", color: "#8FA3B8" }}>

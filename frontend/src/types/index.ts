@@ -220,6 +220,7 @@ export interface PlayerProfile {
   id: string;
   user_id: string;
   status: "pending" | "running" | "done" | "failed";
+  player_name: string | null;
   rating_history: RatingPoint[] | null;
   accuracy_history: AccuracyHistoryPoint[] | null;
   phase_accuracy: PhaseAccuracy | null;

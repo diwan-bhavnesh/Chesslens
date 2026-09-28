@@ -25,7 +25,8 @@ async def fetch_player_games(
     time_control: str = "all",
 ) -> list[dict]:
     """Fetch games from Chess.com, walking monthly archives newest-first until limit is reached."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    username = username.strip().lower()
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         archives_resp = await client.get(
             f"{settings.CHESSCOM_BASE_URL}/player/{username}/games/archives",
             headers=_HEADERS,

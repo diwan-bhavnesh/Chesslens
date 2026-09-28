@@ -83,6 +83,10 @@ Purges any leftover test users from previous runs to ensure a clean slate. Verif
 
 **Pass:** POST returns 202 with a job `id`. Status is `pending` or `running`. Job detail endpoint returns 200 with a `status` field.
 
+Also covers a mixed-case username (e.g. `Hikaru`) — Chess.com's API 301-redirects mixed-case usernames to their lowercase form, which previously crashed the import job because `httpx.AsyncClient` wasn't following redirects. `services/chesscom.py` now lowercases the username before calling the API and sets `follow_redirects=True` as a safety net.
+
+**Pass:** Import job for a mixed-case username reaches `status = "done"` (not `"failed"`) within 10s of polling.
+
 ---
 
 ## Section 11 — Game deletion
@@ -96,6 +100,8 @@ Purges any leftover test users from previous runs to ensure a clean slate. Verif
 `POST /profile/create`, `GET /profile/me`, `POST /profile/rebuild`
 
 **Pass:** `/profile/me` returns 404 before creation. Create returns 202. Duplicate create returns 409. Profile reaches `done` or `failed`. `total_games`, `win_pct_white`, `game_count_at_last_build`, `accuracy_history`, `phase_accuracy` (with opening/middlegame/endgame/game_count), and `time_pressure` (with normal_accuracy/pressure_accuracy/games_analyzed) are all present. `games_total` and `games_done` are present. Rebuild returns 202 or 409. Unauthenticated requests return 401 or 403.
+
+`player_name` is present on the create/rebuild/me responses and reflects the username of the most recently completed Chess.com import job (`compute_chess_username`, computed on every read — not stored on the `PlayerProfile` row, so no migration was needed). The Dashboard header (`{profile.player_name}'s Profile`) uses this instead of the login email, so importing a different Chess.com username updates the header on the next profile fetch. Falls back to the login email's local part, then "Chess Profile", if no import job exists yet.
 
 ---
 

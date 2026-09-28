@@ -200,6 +200,24 @@ if r_cc.status_code == 202:
         check("GET /games/import/jobs/{id} → 200", rj.status_code == 200)
         check("Import job body has status", rj.json().get("status") in ("pending", "running", "done", "failed"))
 
+# Mixed-case username — Chess.com's API 301-redirects mixed-case usernames to
+# lowercase; the job must still complete rather than fail on the redirect.
+r_cc_mc = requests.post(
+    f"{BASE}/games/import/chesscom",
+    headers=hdrs,
+    json={"source": "chesscom", "username": "Hikaru", "max_games": 1, "game_type": "rapid", "time_control": "all"},
+)
+check("POST /games/import/chesscom (mixed-case username) → 202", r_cc_mc.status_code == 202, f"got {r_cc_mc.status_code} — {r_cc_mc.text[:100]}")
+if r_cc_mc.status_code == 202:
+    job_mc_id = r_cc_mc.json().get("id")
+    if job_mc_id:
+        for _ in range(30):
+            rj_mc = requests.get(f"{BASE}/games/import/jobs/{job_mc_id}", headers=hdrs)
+            if rj_mc.json().get("status") in ("done", "failed"):
+                break
+            time.sleep(2)
+        check("Mixed-case username import job status is done (not failed on redirect)", rj_mc.json().get("status") == "done", f"status={rj_mc.json().get('status')} error={rj_mc.json().get('error')}")
+
 # ── 11. Game deletion ─────────────────────────────────────────────────────────
 section("11. Game deletion")
 if game_id:
@@ -233,6 +251,7 @@ check("GET /profile/me before create → 404", r_noprofile.status_code == 404)
 r_create = requests.post(f"{BASE}/profile/create", headers=hdrs)
 check("POST /profile/create → 202", r_create.status_code == 202, f"got {r_create.status_code} — {r_create.text[:100]}")
 check("Profile status is pending/running/done", r_create.json().get("status") in ("pending", "running", "done"))
+check("player_name field present on create response", "player_name" in r_create.json())
 
 # Concurrent create → 409 (if still running)
 if r_create.json().get("status") in ("pending", "running"):
@@ -264,6 +283,7 @@ if rp.status_code == 200:
     pd = rp.json()
     check("Profile status is done or failed", pd.get("status") in ("done", "failed"))
     if pd.get("status") == "done":
+        check("player_name reflects most recent import job's username", pd.get("player_name") is not None, f"player_name={pd.get('player_name')!r}")
         check("total_games is an int", isinstance(pd.get("total_games"), int))
         check("total_games > 0", (pd.get("total_games") or 0) > 0)
         check("win_pct_white present", pd.get("win_pct_white") is not None or pd.get("win_pct_white") is None)  # nullable OK
