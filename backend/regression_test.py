@@ -98,6 +98,10 @@ check("POST /auth/refresh → 200", r_ref.status_code == 200, f"got {r_ref.statu
 check("Refresh returns new access_token", "access_token" in r_ref.json())
 check("Bad refresh token → 401", requests.post(f"{BASE}/auth/refresh", json={"refresh_token": "bad"}).status_code == 401)
 
+# Guest mode is off by default — /auth/guest must 404 unless GUEST_MODE_ENABLED=true.
+r_guest_off = requests.post(f"{BASE}/auth/guest")
+check("POST /auth/guest → 404 when GUEST_MODE_ENABLED is unset/false", r_guest_off.status_code == 404, f"got {r_guest_off.status_code}")
+
 # ── 4. User profile ───────────────────────────────────────────────────────────
 section("4. User profile")
 me = requests.get(f"{BASE}/users/me", headers=hdrs)

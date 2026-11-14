@@ -11,6 +11,11 @@ export async function register(email: string, password: string, full_name?: stri
   return data;
 }
 
+export async function guestLogin(): Promise<TokenPair> {
+  const { data } = await api.post<TokenPair>("/auth/guest");
+  return data;
+}
+
 export async function fetchMe(): Promise<User> {
   const { data } = await api.get<User>("/users/me");
   return data;

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 import httpx
+import uuid
 
 from app.config import settings
 from app.database import get_db
@@ -44,6 +45,23 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    return TokenPair(
+        access_token=create_access_token(str(user.id)),
+        refresh_token=create_refresh_token(str(user.id)),
+    )
+
+
+@router.post("/guest", response_model=TokenPair)
+def guest_login(db: Session = Depends(get_db)):
+    if not settings.GUEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Guest mode is disabled")
+    # Avoid reserved special-use TLDs (.local, .test, .invalid, etc.) — EmailStr
+    # validation on UserOut rejects them even though no deliverability check runs.
+    guest_email = f"guest-{uuid.uuid4().hex}@guest.chesslens-app.com"
+    user = User(email=guest_email, hashed_password=None, full_name="Guest", is_verified=False)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return TokenPair(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),

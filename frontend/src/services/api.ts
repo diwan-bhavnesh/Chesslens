@@ -1,6 +1,7 @@
 import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const GUEST_MODE = import.meta.env.VITE_GUEST_MODE === "true";
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -30,7 +31,21 @@ api.interceptors.response.use(
         } catch {
           localStorage.removeItem("access_token");
           localStorage.removeItem("refresh_token");
-          window.location.href = "/login";
+          if (GUEST_MODE) {
+            try {
+              // Session died (e.g. expired refresh token) — start a fresh guest
+              // identity instead of bouncing to a login page meant to be skipped.
+              const { data } = await axios.post(`${BASE_URL}/auth/guest`);
+              localStorage.setItem("access_token", data.access_token);
+              localStorage.setItem("refresh_token", data.refresh_token);
+              original.headers.Authorization = `Bearer ${data.access_token}`;
+              return api(original);
+            } catch {
+              window.location.href = "/login";
+            }
+          } else {
+            window.location.href = "/login";
+          }
         }
       }
     }

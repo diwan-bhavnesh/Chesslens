@@ -21,6 +21,8 @@ class Settings(BaseSettings):
 
     CHESSCOM_BASE_URL: str = "https://api.chess.com/pub"
 
+    GUEST_MODE_ENABLED: bool = False
+
     APP_ENV: str = "development"
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"

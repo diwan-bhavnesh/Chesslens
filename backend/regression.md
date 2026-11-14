@@ -27,6 +27,10 @@ Purges any leftover test users from previous runs to ensure a clean slate. Verif
 
 **Pass:** Returns 200 with `access_token` and `refresh_token`. Wrong password returns 401.
 
+Also covers `POST /auth/guest` (guest-mode feature toggle, default off): with `GUEST_MODE_ENABLED` unset/false, the endpoint returns 404 and nothing else about auth changes. When `GUEST_MODE_ENABLED=true`, it creates a passwordless `User` with a synthetic unique email and returns a normal `TokenPair` — reusing `create_access_token`/`create_refresh_token`, so the resulting JWT works against every existing protected endpoint exactly like a real account's. Lets the frontend (`VITE_GUEST_MODE`) skip sign-up/login entirely; flipping both flags off restores today's behavior with zero other changes.
+
+**Pass:** `/auth/guest` returns 404 with the flag off (this suite's default).
+
 ---
 
 ## Section 3 — Token refresh
