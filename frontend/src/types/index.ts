@@ -7,6 +7,7 @@ export interface User {
   is_verified: boolean;
   chesscom_username: string | null;
   created_at: string;
+  is_guest: boolean;
 }
 
 export interface Move {

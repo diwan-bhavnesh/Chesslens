@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, computed_field
 import uuid
+
+GUEST_EMAIL_DOMAIN = "@guest.chesslens-app.com"
 
 
 class UserBase(BaseModel):
@@ -25,6 +27,11 @@ class UserOut(UserBase):
     is_verified: bool
     chesscom_username: Optional[str] = None
     created_at: datetime
+
+    @computed_field
+    @property
+    def is_guest(self) -> bool:
+        return self.email.endswith(GUEST_EMAIL_DOMAIN)
 
     class Config:
         from_attributes = True

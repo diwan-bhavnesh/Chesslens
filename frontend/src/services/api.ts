@@ -1,7 +1,7 @@
 import axios from "axios";
+import { GUEST_MODE } from "../config";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-const GUEST_MODE = import.meta.env.VITE_GUEST_MODE === "true";
 
 export const api = axios.create({
   baseURL: BASE_URL,

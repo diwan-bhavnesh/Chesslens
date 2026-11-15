@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
+import { useAuthStore } from "./store/authStore";
+import { useGameStore } from "./store/gameStore";
 import { Layout } from "./components/layout/Layout";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
@@ -12,14 +15,25 @@ import { MyGames } from "./pages/MyGames";
 import { Prototype } from "./pages/Prototype";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  // Reads the store that App()'s single useAuth() call already bootstraps —
+  // must NOT call useAuth() again here: its effect re-runs the bootstrap
+  // (including the guest-mode account-creation call) on every mount, and
+  // guest provisioning isn't idempotent like the old token-refresh path was.
+  const { user, isLoading } = useAuthStore();
   if (isLoading) return null;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 export function App() {
-  useAuth();
+  const { user, isLoading } = useAuth();
+  const fetchGames = useGameStore(state => state.fetchGames);
+
+  // Lets the Navbar know whether this session has any games at all, without
+  // every page needing its own fetch — the Navbar itself has no fetch of its own.
+  useEffect(() => {
+    if (!isLoading && user) fetchGames();
+  }, [isLoading, user]);
 
   return (
     <BrowserRouter>

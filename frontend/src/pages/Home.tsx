@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
+import { GUEST_MODE } from "../config";
 
 export function Home() {
   const { user } = useAuthStore();
@@ -57,7 +58,7 @@ export function Home() {
         </p>
 
         <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap" }}>
-          {user ? (
+          {user && !user.is_guest ? (
             <Link to="/dashboard">
               <button style={{
                 fontSize: "1rem", padding: "0.75rem 2rem",
@@ -66,6 +67,16 @@ export function Home() {
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#C49B35"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#D4A843"; }}
               >Go to Dashboard</button>
+            </Link>
+          ) : GUEST_MODE ? (
+            <Link to="/import">
+              <button style={{
+                fontSize: "1rem", padding: "0.75rem 2rem",
+                background: "#D4A843", color: "#0D1B2A", border: "none",
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#C49B35"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#D4A843"; }}
+              >Get started</button>
             </Link>
           ) : (
             <>

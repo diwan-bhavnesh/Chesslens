@@ -891,7 +891,7 @@ export function Dashboard() {
           }}>
             {profile?.player_name
               ? `${profile.player_name}'s Profile`
-              : user?.email
+              : user?.email && !user.is_guest
               ? `${user.email.split("@")[0]}'s Profile`
               : "Chess Profile"}
           </h1>
@@ -929,6 +929,21 @@ export function Dashboard() {
             >
               {isBuilding ? "Updating…" : "Update Profile"}
             </button>
+          )}
+          {hasGames && (
+            <Link to="/import" style={{ textDecoration: "none" }}>
+              <button
+                style={{
+                  background: "transparent", color: "#8FA3B8", fontWeight: 600,
+                  padding: "0.5625rem 1rem", fontSize: "0.8125rem",
+                  borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(212,168,67,0.4)"; (e.currentTarget as HTMLButtonElement).style.color = "#F5F0E8"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLButtonElement).style.color = "#8FA3B8"; }}
+              >
+                Import again
+              </button>
+            </Link>
           )}
           {(hasGames || hasProfile) && (
             <button

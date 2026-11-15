@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { useAuthStore } from "../store/authStore";
 import { fetchMe, clearTokens, guestLogin, saveTokens } from "../services/auth";
-
-const GUEST_MODE = import.meta.env.VITE_GUEST_MODE === "true";
+import { GUEST_MODE } from "../config";
 
 export function useAuth() {
   const { user, isLoading, setUser, setLoading, logout } = useAuthStore();

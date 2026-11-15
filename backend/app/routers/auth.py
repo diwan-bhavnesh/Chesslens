@@ -7,7 +7,7 @@ import uuid
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import LoginRequest, TokenPair, TokenRefresh, UserCreate, UserOut
+from app.schemas.user import GUEST_EMAIL_DOMAIN, LoginRequest, TokenPair, TokenRefresh, UserCreate, UserOut
 from app.services.auth import (
     authenticate_user,
     create_access_token,
@@ -57,7 +57,7 @@ def guest_login(db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Guest mode is disabled")
     # Avoid reserved special-use TLDs (.local, .test, .invalid, etc.) — EmailStr
     # validation on UserOut rejects them even though no deliverability check runs.
-    guest_email = f"guest-{uuid.uuid4().hex}@guest.chesslens-app.com"
+    guest_email = f"guest-{uuid.uuid4().hex}{GUEST_EMAIL_DOMAIN}"
     user = User(email=guest_email, hashed_password=None, full_name="Guest", is_verified=False)
     db.add(user)
     db.commit()
