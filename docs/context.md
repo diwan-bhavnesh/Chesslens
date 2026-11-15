@@ -1,6 +1,6 @@
 # Chesslens — Project Context
 
-_Last updated: 2026-06-14 — Session 21_
+_Last updated: 2026-06-29 — Session 22_
 
 > **Full product requirements:** See [`PRD.md`](./PRD.md) — personas, user journey, feature specs, KPIs, backlog.
 
@@ -29,6 +29,7 @@ _Last updated: 2026-06-14 — Session 21_
 | 19 | 2026-06-11 | Lichess Cloud Eval — full architecture designed | Full "Harvest Before You Need It" architecture designed. Two-pipeline approach: Pipeline A (silent harvest on import) + Pipeline B (accuracy computation = pure DB reads). Parallel batching (50 concurrent Lichess requests). Position classification by move number. Network effect: cache warms across all users. Full user journey documented. No code written — design phase complete. |
 | 20 | 2026-06-14 | Stuck analysis fix + deploy | Fly.io machine restart killed bulk analysis mid-run. Two-part fix: (1) heartbeat stamp `profile.updated_at` every 10 games, (2) staleness check on GET /profile/me resets both stuck-running AND stuck-done states. Deployed to production. 121/121 regression suite. |
 | 21 | 2026-06-14 | Lichess coverage gate + LLM direction pivot | Coverage gate run: Lichess Cloud Eval hit rate is 52% for moves 6–10, 10% for moves 11–15, 0% beyond. Overall 15.5% — too low to justify the harvest architecture. Lichess integration cancelled. New direction under exploration: LLM-powered pattern analysis + recommendation engine (replace Stockfish accuracy with coach-style insights). Session ended in planning. |
+| 22 | 2026-06-29 | Fly cost cut + bulk-speedup plan | Cut Fly.io cost: `min_machines_running` 1→0 (deployed) — ~$9/mo → ~$0.14/mo (scale-to-zero; data preserved). Reviewed/rejected ChatGPT cloud-migration doc (Cloud Run/Neon) — not worth it now since Fly already at zero. Deep-dive: measured Stockfish speed + game data on the Mac. Locked bulk-analysis speedup plan (run parallel on Mac's 12 cores, ~9× free). Plan only — no analysis code changed. See [`BULK_SPEEDUP_PLAN.md`](./BULK_SPEEDUP_PLAN.md). |
 
 ---
 
@@ -102,6 +103,32 @@ _Last updated: 2026-06-14 — Session 21_
 ---
 
 ## Session Decisions Log
+
+### Session 22 (2026-06-29) — Fly Cost Cut + Bulk-Analysis Speedup Plan
+
+**Theme:** Cut infrastructure cost, then deep-dive a plan to speed up bulk analysis. No analysis code changed — plan locked for next session.
+
+**1. Fly.io cost cut (DONE + deployed)**
+- `backend/fly.toml`: `min_machines_running` 1 → 0. Machine now scales to zero when idle.
+- Cost: **~$9/mo → ~$0.14/mo** (storage only). Data fully preserved (volumes persist when machine sleeps).
+- Trade-off: first request after idle has a ~3–5s cold start. Acceptable for personal use.
+- Invoice breakdown confirmed the $9 was 98% the always-on 1GB machine (CPU $4.53 + RAM $4.37). The 1GB RAM (vs the 256MB assumed in DEPLOYMENT.md) was the surprise cost driver.
+- Verify on July preview invoice: https://fly.io/dashboard/diwan-bhavnesh-gmail-com → Billing.
+
+**2. ChatGPT cloud-migration doc — REVIEWED, REJECTED for now**
+- Suggested Cloud Run + Neon + Cloudflare. Sound in general, but: (a) Cloudflare Workers can't run Stockfish (CPU limits); (b) Cloud Run scale-to-zero risks killing long background analysis (same class as Session 20 bug); (c) the $9→$0-3 saving it pitched no longer exists — Fly is already at ~$0.14. Migration effort underestimated. **Stay on Fly.** Neon is the only piece worth revisiting later.
+
+**3. Bulk-analysis speedup — PLAN LOCKED (not built)**
+- Full plan in [`BULK_SPEEDUP_PLAN.md`](./BULK_SPEEDUP_PLAN.md).
+- **Measured on the Mac:** 57 positions/game (500 games ≈ 28,500 searches); dedupe useless (99% unique); single-core d10=54/s, d15=8.2/s; ~9× parallel on 12 cores.
+- **Hard finding:** ≤15s OR higher depth — not both at 500 games. Full coverage: depth 10 ≈ 40–60s, depth 8 ≈ 27s, depth 15 ≈ 6.4min. 15s only via depth 8 + ~45% sampling.
+- **Plan:** new `backend/bulk_analyze_parallel.py` — parallel (ProcessPoolExecutor, cpu-2 workers, one Stockfish each), whole games per worker, depth-based limits, batched DB write. Modes: full / fast / adaptive. Runs on Mac now; stays server-callable for later.
+- **Recommended default:** `full --depth 10` (~45s, no accuracy loss). Preserves Session 14's 85.4% calibration.
+- **Deviation flagged:** breaks CLAUDE.md "Stockfish server-side / SaaS" rule. Authorized by user ("only for myself now"). Keep module server-callable so SaaS door stays open.
+
+**Open decisions for next session:** (1) default mode (recommend full/depth-10) vs forced 15s; (2) DB target — local SQLite only vs write back to Fly; (3) build now vs benchmark exact parallel speedup first.
+
+---
 
 ### Session 21 (2026-06-14) — Lichess Coverage Gate + LLM Direction Pivot
 
@@ -462,14 +489,26 @@ See previous context entries.
 
 | Priority | Issue | Notes |
 |----------|-------|-------|
+| 🔴 High | **Accuracy analysis (Layer 2) gets stuck** | Confirmed reproducible by user 2026-06-29. Layer 2 bulk accuracy run stalls and does not complete. To diagnose next session. Possible angles: scale-to-zero (`min_machines_running=0`) stopping machine mid-run if Dashboard tab closed / polling stops; long run exceeding Fly timeout; staleness-reset not firing. NOT yet root-caused. Revisit alongside the bulk-speedup build (which would move analysis to the Mac and likely sidestep this entirely). |
 | 🟡 Medium | Anthropic API credits | Playing Style + Coaching sections blank until user tops up at console.anthropic.com |
 | 🟢 Low | `bcrypt` pinned to 3.2.2 | Cannot upgrade — passlib 1.7.4 incompatible with bcrypt ≥ 4.0 |
 
 ---
 
-## What's Next — Session 22
+## What's Next — Session 23
 
-**Active decision (must resolve before coding):**
+**🔴 First: diagnose the stuck accuracy-analysis bug** (see Open Issues — confirmed reproducible 2026-06-29, not root-caused). The bulk-speedup build may resolve it by moving analysis off Fly to the Mac, but confirm the root cause first.
+
+**Active task — bulk-analysis speedup (plan locked, build pending):**
+
+Full plan: [`BULK_SPEEDUP_PLAN.md`](./BULK_SPEEDUP_PLAN.md). Resume at its "Open decisions":
+1. Default mode — recommend `full --depth 10` (~45s, no accuracy loss) vs forced 15s `fast` mode.
+2. DB target — local SQLite only vs also write back to Fly Postgres.
+3. Build immediately vs benchmark exact parallel speedup first.
+
+Then build `backend/bulk_analyze_parallel.py`, run against local DB, re-run regression Section 17.
+
+**Parked (was Session 22's planned topic):**
 
 1. **LLM-powered recommendation engine — direction to lock**
    - Replace or augment Stockfish accuracy %?

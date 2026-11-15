@@ -1,7 +1,9 @@
 # Environment files
 .env
+.env.local
 backend/.env
 frontend/.env
+frontend/.env.local
 
 # Python cache
 __pycache__/
@@ -35,3 +37,7 @@ frontend/dist/
 
 # Dev prototypes
 frontend/public/prototype-*.html
+
+# Claude Code tooling artifacts (not Chesslens source)
+.agents/
+skills-lock.json

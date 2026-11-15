@@ -1,16 +1,25 @@
 # Chesslens
 
-An AI-powered chess analysis platform that imports your games from Chess.com and builds a comprehensive player profile — playing style, opening repertoire, accuracy trends, phase performance, and personalised coaching recommendations.
+An AI-powered chess analysis platform that imports games from Chess.com and builds a comprehensive player profile — playing style, opening repertoire, accuracy trends, phase performance, and personalised coaching recommendations.
 
-**Stack:** FastAPI · SQLite · React · Vite · TypeScript · Stockfish · Claude (Anthropic)
+**Live:** [chesslens-io.vercel.app](https://chesslens-io.vercel.app) — no sign-up required, see below.
 
-> **Status:** Feature-complete MVP. All core analysis features built and tested (117/117 regression checks). Production deployment planned — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+**Stack:** FastAPI · SQLite/Postgres · React · Vite · TypeScript · Stockfish · Claude (Anthropic)
+
+> **Status:** Deployed (Fly.io + Vercel + Postgres). 126/126 regression checks passing. See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the deployment setup and [docs/](./docs/) for product history and specs.
 
 ---
 
+## No sign-up required
+
+Chesslens can run with **zero account creation**. Enter any Chess.com username and get a full report — no email, no password. This runs on a feature toggle (`GUEST_MODE_ENABLED` / `VITE_GUEST_MODE`, both on in production):
+- A hidden, anonymous account is provisioned silently on first visit.
+- Real accounts (email/password or Google) still work as a separate, optional path for anyone who wants one.
+- See [docs/NO_LOGIN_UI_SPEC.md](./docs/NO_LOGIN_UI_SPEC.md) for the full design spec.
+
 ## What It Does
 
-Import your Chess.com games once. Chesslens runs two analysis layers automatically:
+Import Chess.com games once. Chesslens runs two analysis layers automatically:
 
 **Layer 1 — Instant** (seconds, no Stockfish)
 - Rating history with game-type and time-control filters
@@ -48,7 +57,7 @@ Per-game review is also available: full board replay, eval bar, eval graph, move
 | Frontend | React 18 + Vite + TypeScript |
 | State management | Zustand |
 | Charts | Recharts |
-| Auth | JWT (email/password) + Google OAuth |
+| Auth | JWT (email/password) + Google OAuth + guest mode (no account) |
 
 ---
 
@@ -69,14 +78,16 @@ chesslens/
 │   │       ├── stockfish.py      # Per-game depth-12 analysis (chain model, ~1s/game)
 │   │       ├── claude.py         # Claude API calls
 │   │       └── chesscom.py       # Chess.com archive import
-│   ├── regression_test.py        # End-to-end regression suite (117 checks)
+│   ├── regression_test.py        # End-to-end regression suite (126 checks)
 │   └── .env                      # Environment variables (not committed)
-└── frontend/
-    └── src/
-        ├── pages/                # Dashboard, MyGames, GameReview, Import…
-        ├── store/                # Zustand stores (auth, game, profile, filter)
-        ├── services/             # Axios API client
-        └── types/                # TypeScript interfaces
+├── frontend/
+│   └── src/
+│       ├── pages/                # Dashboard, MyGames, GameReview, Import…
+│       ├── store/                # Zustand stores (auth, game, profile, filter)
+│       ├── services/             # Axios API client
+│       ├── config.ts             # Feature flags (e.g. GUEST_MODE)
+│       └── types/                # TypeScript interfaces
+└── docs/                         # Product history, deployment, feature specs
 ```
 
 ---
@@ -134,7 +145,7 @@ npm install
 npm run dev          # dev server at http://localhost:5173
 ```
 
-Open **http://localhost:5173** in your browser. Register an account, import your Chess.com games, and explore.
+Open **http://localhost:5173** in your browser. Register an account (or set `GUEST_MODE_ENABLED=true` / `VITE_GUEST_MODE=true` to skip accounts entirely — see "No sign-up required" above), import Chess.com games, and explore.
 
 ---
 
@@ -150,6 +161,7 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values. The file h
 **Optional (app works without these):**
 - `ANTHROPIC_API_KEY` — needed for playing style classification and coaching recommendations. Without it, the profile builds but those sections will be empty.
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — needed for "Sign in with Google" only. Email/password registration and login work without it.
+- `GUEST_MODE_ENABLED` (backend) / `VITE_GUEST_MODE` (frontend, `.env` in `frontend/`) — both default `false`. Set both `true` to skip accounts entirely (see "No sign-up required" above). Flip either back to `false` to fully restore today's login-required behavior — no other code changes needed.
 
 > `ANTHROPIC_API_KEY` is optional. Without it, all Stockfish-based features (accuracy, Game Review, phase accuracy, time pressure) work fully. Only the AI synthesis sections (Playing Style, Coaching, per-game narrative) will be empty.
 
@@ -164,7 +176,7 @@ cd backend
 python3 regression_test.py
 ```
 
-117 checks across 17 sections — auth, game import, Stockfish analysis (bulk depth-5 + individual depth-12), player profile (Layer 1 + Layer 2), FEN cache, accuracy calibration, API availability. All must pass before any session is declared complete.
+126 checks across 18 sections — auth (including guest mode), game import, Stockfish analysis (bulk depth-5 + individual depth-12), player profile (Layer 1 + Layer 2), FEN cache, accuracy calibration, API availability. All must pass before any session is declared complete. See [backend/regression.md](./backend/regression.md) for the full section-by-section catalogue.
 
 ---
 
@@ -187,7 +199,9 @@ python3 regression_test.py
 - [x] Depth-5 all-moves bulk analysis (calibrated accuracy)
 - [x] Depth-12 per-game review (~1s/game with chain model)
 - [x] Verbal move explanations + eval graph in Game Review
-- [ ] SaaS deployment — Fly.io (backend) + Vercel (frontend) + Postgres ([plan](./DEPLOYMENT.md))
+- [x] SaaS deployment — Fly.io (backend) + Vercel (frontend) + Postgres (see [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md))
+- [x] No-login guest mode (see [docs/NO_LOGIN_UI_SPEC.md](./docs/NO_LOGIN_UI_SPEC.md))
+- [ ] Clean error messaging for failed imports (raw backend errors currently leak to the UI)
 - [ ] Mobile responsiveness
 - [ ] React Native mobile app
 - [ ] Lichess import (code exists, parked)
