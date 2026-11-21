@@ -144,8 +144,15 @@ Verifies the all-moves chain model writes sufficient Move rows and produces real
 
 ---
 
+## Section 19 — Graceful error responses
+Verifies that failures reach the frontend as clean JSON it can turn into friendly messages.
+
+**Pass:** Unknown game → 404, analysis of unknown game → 404, bad token → 401, malformed import payload → 422 — each with a JSON `detail` body. An unexpected exception (forced in-process via a throwaway route) returns 500 with a friendly JSON `detail`, does not leak the internal exception text, and includes the CORS header for an allowed origin (so the browser shows the real error, not "Network Error").
+
+---
+
 ## Planned future sections
 
 | Section | Covers | Trigger |
 |---------|--------|---------|
-| 18 | Chess960 variant field in game schema — verify `variant` returned by `GET /games/{id}` after importing a Chess960 PGN | When Chess960 end-to-end import is smoke-tested |
+| 20 | Chess960 variant field in game schema — verify `variant` returned by `GET /games/{id}` after importing a Chess960 PGN | When Chess960 end-to-end import is smoke-tested |

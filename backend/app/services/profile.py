@@ -1,3 +1,4 @@
+import logging
 import math
 import uuid
 from collections import defaultdict
@@ -354,6 +355,7 @@ def build_profile(user_id: str) -> None:
             profile.updated_at = datetime.utcnow()
             db.commit()
         except Exception as ce:
+            logging.getLogger("chesslens").exception("Claude profile synthesis failed")
             profile.claude_error = str(ce)[:200]
             db.commit()
 
@@ -371,9 +373,11 @@ def build_profile(user_id: str) -> None:
             profile.updated_at = datetime.utcnow()
             db.commit()
         except Exception:
+            logging.getLogger("chesslens").exception("Layer 2 bulk accuracy failed (profile stays usable)")
             pass
 
     except Exception as e:
+        logging.getLogger("chesslens").exception("Profile build failed")
         db.rollback()
         profile = db.query(PlayerProfile).filter(PlayerProfile.user_id == user_id).first()
         if profile:
