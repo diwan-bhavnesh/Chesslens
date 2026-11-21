@@ -5,6 +5,9 @@ import { useFilterStore } from "../store/filterStore";
 import { useAuthStore } from "../store/authStore";
 import { useProfileStore } from "../store/profileStore";
 import type { Game } from "../types";
+import { ErrorState } from "../components/ui/ErrorState";
+import { toast } from "../store/toastStore";
+import { getErrorMessage } from "../utils/errors";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -607,7 +610,7 @@ function GameTable({ games, username, onDelete, onAnalyze, onReview, awaitingRev
 // ── My Games page ─────────────────────────────────────────────────────────────
 
 export function MyGames() {
-  const { games, isLoading, fetchGames, deleteGame, triggerAnalysis, refreshGameInList } = useGameStore();
+  const { games, isLoading, gamesError, fetchGames, deleteGame, triggerAnalysis, refreshGameInList } = useGameStore();
   const { result, gameType, dateKey, sortBy, sortDir, clearFilters } = useFilterStore();
   const { user } = useAuthStore();
   const { profile } = useProfileStore();
@@ -634,15 +637,34 @@ export function MyGames() {
   useEffect(() => { fetchGames(); }, []);
 
   const handleAnalyze = useCallback(async (id: string) => {
-    await triggerAnalysis(id);
-    refreshGameInList(id);
+    try {
+      await triggerAnalysis(id);
+      refreshGameInList(id);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't start the analysis. Please try again."));
+    }
   }, [triggerAnalysis, refreshGameInList]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      await deleteGame(id);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't delete that game. Please try again."));
+    }
+  }, [deleteGame]);
 
   const handleReview = useCallback(async (id: string) => {
     reviewReadyRef.current = false;
     setAwaitingReviewId(id);
-    await triggerAnalysis(id);
-    await refreshGameInList(id);
+    try {
+      await triggerAnalysis(id);
+      await refreshGameInList(id);
+    } catch (err) {
+      // Without this the row would spin on "Preparing review…" forever.
+      setAwaitingReviewId(null);
+      toast.error(getErrorMessage(err, "Couldn't open the review. Please try again."));
+      return;
+    }
     reviewReadyRef.current = true;
     // Direct store read (Zustand sync): if backend returned "done" immediately, navigate now
     const game = useGameStore.getState().games.find(g => g.id === id);
@@ -757,7 +779,11 @@ export function MyGames() {
         </div>
       )}
 
-      {!isLoading && games.length === 0 && (
+      {!isLoading && gamesError && games.length === 0 && (
+        <ErrorState title="Couldn't load your games" message={gamesError} onRetry={fetchGames} />
+      )}
+
+      {!isLoading && !gamesError && games.length === 0 && (
         <div style={{ textAlign: "center", padding: "5rem 2rem" }}>
           <p style={{ fontSize: "1.125rem", fontWeight: 700, color: "#F5F0E8", marginBottom: "0.75rem" }}>No games yet</p>
           <p style={{ fontSize: "0.9rem", color: "#8FA3B8", marginBottom: "1.5rem" }}>Import from Chess.com to get started.</p>
@@ -813,7 +839,7 @@ export function MyGames() {
           ) : (
             <>
               <SortToolbar total={filtered.length} page={page} pageSize={PAGE_SIZE} />
-              <GameTable games={paginated} username={username} onDelete={deleteGame} onAnalyze={handleAnalyze} onReview={handleReview} awaitingReviewId={awaitingReviewId} />
+              <GameTable games={paginated} username={username} onDelete={handleDelete} onAnalyze={handleAnalyze} onReview={handleReview} awaitingReviewId={awaitingReviewId} />
               <Pagination page={page} totalPages={totalPages} onPage={setPage} />
             </>
           )}

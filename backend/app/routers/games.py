@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -228,6 +229,7 @@ async def _run_import(job_id: str, user_id: str, platform: str, payload: GameImp
         db.commit()
 
     except Exception as e:
+        logging.getLogger("chesslens").exception("Game import job failed")
         try:
             db.rollback()
             if job:

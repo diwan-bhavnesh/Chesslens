@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -175,6 +176,7 @@ def _run_batch_analysis(batch_id: str, user_id: str):
         db.commit()
 
     except Exception as e:
+        logging.getLogger("chesslens").exception("Portfolio analysis failed")
         db.rollback()
         batch = db.query(BatchAnalysis).filter(BatchAnalysis.id == batch_id).first()
         if batch:
@@ -237,6 +239,7 @@ def _run_analysis(game_id: str):
             }
             summary = cl.generate_game_summary(move_data, game_meta)
         except Exception:
+            logging.getLogger("chesslens").exception("Game summary generation failed (analysis continues without it)")
             pass
 
         analysis = db.query(GameAnalysis).filter(GameAnalysis.game_id == game_id).first()
@@ -256,6 +259,7 @@ def _run_analysis(game_id: str):
             analysis.key_moments = key_moments
             db.commit()
     except Exception:
+        logging.getLogger("chesslens").exception("Per-game analysis failed")
         analysis = db.query(GameAnalysis).filter(GameAnalysis.game_id == game_id).first()
         if analysis:
             analysis.status = "failed"

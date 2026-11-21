@@ -523,6 +523,53 @@ if r18_me.status_code == 200:
 # Cleanup
 requests.delete(f"{BASE}/games/all", headers=hdrs)
 
+# ── 19. Graceful error responses ─────────────────────────────────────────────
+section("19. Graceful error responses")
+
+def _has_str_detail(resp) -> bool:
+    try:
+        return isinstance(resp.json().get("detail"), (str, list))
+    except Exception:
+        return False
+
+missing_id = uuid.uuid4().hex
+r19_404 = requests.get(f"{BASE}/games/{missing_id}", headers=hdrs)
+check("Unknown game → 404", r19_404.status_code == 404, f"got {r19_404.status_code}")
+check("404 body is JSON with 'detail'", _has_str_detail(r19_404))
+
+r19_an404 = requests.post(f"{BASE}/analysis/{missing_id}", headers=hdrs)
+check("Analysis of unknown game → 404", r19_an404.status_code == 404, f"got {r19_an404.status_code}")
+
+r19_401 = requests.get(f"{BASE}/games/", headers={"Authorization": "Bearer not-a-real-token"})
+check("Bad token → 401", r19_401.status_code == 401, f"got {r19_401.status_code}")
+check("401 body is JSON with 'detail'", _has_str_detail(r19_401))
+
+r19_422 = requests.post(f"{BASE}/games/import/pgn", headers=hdrs, json={})
+check("Malformed import payload → 422", r19_422.status_code == 422, f"got {r19_422.status_code}")
+check("422 body is JSON with 'detail'", _has_str_detail(r19_422))
+
+# Unexpected crash → safe JSON 500 (not a stack trace, not a bare HTML page).
+# Runs in-process because a healthy live server has no route that crashes on purpose.
+try:
+    sys.path.insert(0, os.path.dirname(__file__))
+    from fastapi.testclient import TestClient
+    from app.main import app as _app
+
+    @_app.get("/__regression_boom")
+    def _boom():
+        raise RuntimeError("secret internal detail")
+
+    _client = TestClient(_app, raise_server_exceptions=False)
+    r19_500 = _client.get("/__regression_boom", headers={"Origin": "http://localhost:5173"})
+    check("Unhandled exception → 500", r19_500.status_code == 500, f"got {r19_500.status_code}")
+    check("500 body is JSON with friendly 'detail'", _has_str_detail(r19_500))
+    check("500 body does not leak internals", "secret internal detail" not in r19_500.text)
+    check("500 carries CORS header for allowed origin",
+          r19_500.headers.get("access-control-allow-origin") == "http://localhost:5173",
+          str(dict(r19_500.headers)))
+except Exception as e:
+    check("In-process 500 handler test", False, str(e))
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 total = passed + failed
 print(f"\n{'═'*52}")
