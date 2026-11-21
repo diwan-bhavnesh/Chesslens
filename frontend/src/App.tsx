@@ -4,6 +4,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useAuthStore } from "./store/authStore";
 import { useGameStore } from "./store/gameStore";
 import { Layout } from "./components/layout/Layout";
+import { ErrorState } from "./components/ui/ErrorState";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -19,8 +20,13 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   // must NOT call useAuth() again here: its effect re-runs the bootstrap
   // (including the guest-mode account-creation call) on every mount, and
   // guest provisioning isn't idempotent like the old token-refresh path was.
-  const { user, isLoading } = useAuthStore();
+  const { user, isLoading, authError } = useAuthStore();
   if (isLoading) return null;
+  // Startup couldn't confirm the session (offline / server down): show a retry, not the login page.
+  // Reloading re-runs the single bootstrap in useAuth().
+  if (!user && authError) {
+    return <ErrorState title="Couldn't start Chesslens" message={authError} onRetry={() => window.location.reload()} />;
+  }
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

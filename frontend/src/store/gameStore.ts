@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import type { BatchAnalysis, Game, GameDetail } from "../types";
 import { api } from "../services/api";
+import { getErrorMessage, getErrorStatus } from "../utils/errors";
 
 interface GameState {
+  gamesError: string | null;                 // set when the games list fails to load
+  gameLoadError: "not_found" | "failed" | null; // set when the single game fails on first load
   games: Game[];
   currentGame: GameDetail | null;
   batchAnalysis: BatchAnalysis | null;
@@ -18,28 +21,37 @@ interface GameState {
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
+  gamesError: null,
+  gameLoadError: null,
   games: [],
   currentGame: null,
   batchAnalysis: null,
   isLoading: false,
 
   fetchGames: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, gamesError: null });
     try {
       const { data } = await api.get<Game[]>("/games/?limit=5000");
       set({ games: data });
+    } catch (err) {
+      // Keep any games we already have; pages show a retry state only when the list is empty.
+      set({ gamesError: getErrorMessage(err, "We couldn't load your games.") });
     } finally {
       set({ isLoading: false });
     }
   },
 
   fetchGame: async (id) => {
+    const isInitialLoad = get().currentGame?.id !== id;
+    if (isInitialLoad) set({ currentGame: null, gameLoadError: null });
     try {
       const { data } = await api.get<GameDetail>(`/games/${id}`);
-      set({ currentGame: data });
-    } catch {
-      // on initial load currentGame is already null → "Game not found" shows
-      // on poll failure keep the last good data rather than blanking the screen
+      set({ currentGame: data, gameLoadError: null });
+    } catch (err) {
+      // On a background poll failure keep the last good data rather than blanking the screen.
+      if (isInitialLoad) {
+        set({ gameLoadError: getErrorStatus(err) === 404 ? "not_found" : "failed" });
+      }
     }
   },
 

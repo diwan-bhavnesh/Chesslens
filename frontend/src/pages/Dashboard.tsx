@@ -7,6 +7,9 @@ import { useGameStore } from "../store/gameStore";
 import { useProfileStore } from "../store/profileStore";
 import { useAuthStore } from "../store/authStore";
 import type { OpeningStat2, OpponentOpening, CoachingRecommendation, PlayerProfile } from "../types";
+import { ErrorState } from "../components/ui/ErrorState";
+import { toast } from "../store/toastStore";
+import { getErrorMessage } from "../utils/errors";
 
 // ── Chess quotes ──────────────────────────────────────────────────────────────
 
@@ -780,7 +783,7 @@ function ProfileView({ profile, gameCount }: { profile: PlayerProfile; gameCount
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
-  const { games, isLoading: gamesLoading, fetchGames, clearAllGames } = useGameStore();
+  const { games, isLoading: gamesLoading, gamesError, fetchGames, clearAllGames } = useGameStore();
   const { profile, isLoading: profileLoading, fetchProfile, pollProfile, createProfile, rebuildProfile, clearProfile } = useProfileStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -833,8 +836,8 @@ export function Dashboard() {
     try {
       await createProfile();
       await fetchProfile();
-    } catch {
-      // best-effort
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't start building your profile. Please try again."));
     } finally {
       setIsBuilding(false);
     }
@@ -846,9 +849,10 @@ export function Dashboard() {
       await clearAllGames();
       clearProfile();
       navigate("/");
-    } catch {
+    } catch (err) {
       setIsDeleting(false);
       setShowDeleteModal(false);
+      toast.error(getErrorMessage(err, "Couldn't delete your games. Please try again."));
     }
   }, [clearAllGames, clearProfile, navigate]);
 
@@ -875,6 +879,18 @@ export function Dashboard() {
         <div style={{ padding: "5rem 0", textAlign: "center", color: "#8FA3B8", fontSize: "0.9rem" }}>
           <Spinner /> &nbsp; Loading…
         </div>
+      </div>
+    );
+  }
+
+  if (gamesError && games.length === 0 && !profile) {
+    return (
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem 2rem 5rem", background: "#0D1B2A" }}>
+        <ErrorState
+          title="Couldn't load your dashboard"
+          message={gamesError}
+          onRetry={() => { fetchGames(); fetchProfile(); }}
+        />
       </div>
     );
   }

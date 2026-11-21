@@ -10,6 +10,9 @@ import { MoveList } from "../components/chess/MoveList";
 import { AnalysisPanel } from "../components/chess/AnalysisPanel";
 import { EvalBar } from "../components/chess/EvalBar";
 import { EvalGraph } from "../components/chess/EvalGraph";
+import { ErrorState } from "../components/ui/ErrorState";
+import { toast } from "../store/toastStore";
+import { getErrorMessage } from "../utils/errors";
 
 type AnalysisState = "none" | "running" | "done" | "failed";
 
@@ -17,7 +20,7 @@ const calcBoardSize = () => Math.max(300, Math.min(window.innerHeight - 220, 560
 
 export function GameReview() {
   const { id } = useParams<{ id: string }>();
-  const { currentGame, fetchGame, triggerAnalysis } = useGameStore();
+  const { currentGame, gameLoadError, fetchGame, triggerAnalysis } = useGameStore();
   const { user } = useAuthStore();
   const [localLoading, setLocalLoading] = useState(true);
 
@@ -107,8 +110,12 @@ export function GameReview() {
 
   const handleTriggerAnalysis = useCallback(async () => {
     if (!id) return;
-    await triggerAnalysis(id);
-    await fetchGame(id);
+    try {
+      await triggerAnalysis(id);
+      await fetchGame(id);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't start the analysis. Please try again."));
+    }
   }, [id, triggerAnalysis, fetchGame]);
 
   const startFen = useMemo(() => new Chess().fen(), []);
@@ -138,6 +145,20 @@ export function GameReview() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "calc(100vh - 56px)", color: "#8FA3B8" }}>
         Loading game…
       </div>
+    );
+  }
+
+  if (!currentGame && gameLoadError === "failed") {
+    return (
+      <ErrorState
+        title="Couldn't load this game"
+        message="We couldn't reach the server. Check your connection and try again."
+        onRetry={() => {
+          if (!id) return;
+          setLocalLoading(true);
+          fetchGame(id).finally(() => setLocalLoading(false));
+        }}
+      />
     );
   }
 

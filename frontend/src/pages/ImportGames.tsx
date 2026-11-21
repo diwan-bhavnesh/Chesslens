@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../services/api";
 import { useProfileStore } from "../store/profileStore";
+import { getErrorMessage, getErrorStatus, getImportFailureMessage, isNetworkError } from "../utils/errors";
 
 type Platform = "chesscom";
 type GameType = "all" | "bullet" | "blitz" | "rapid" | "classical" | "chess960";
@@ -70,9 +71,29 @@ export function ImportGames() {
 
   const tcGroups = TIME_CONTROLS[gameType];
 
+  const MAX_POLL_FAILURES = 3;
+
   const pollJob = async (jobId: string): Promise<void> => {
+    let failures = 0;
     while (true) {
-      const { data: job } = await api.get<JobStatus>(`/games/import/jobs/${jobId}`);
+      let job: JobStatus;
+      try {
+        ({ data: job } = await api.get<JobStatus>(`/games/import/jobs/${jobId}`));
+        failures = 0;
+      } catch {
+        // A brief connection drop should not abort the wait. The import keeps running on the server.
+        failures += 1;
+        if (failures >= MAX_POLL_FAILURES) {
+          setError(
+            "We lost connection while importing. Your games may still be importing. " +
+            "Wait a minute, then check My Games."
+          );
+          setIsLoading(false);
+          return;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
       setJobStatus(job);
       if (job.status === "done") {
         await createProfile().catch(() => {});
@@ -80,7 +101,7 @@ export function ImportGames() {
         return;
       }
       if (job.status === "failed") {
-        setError(job.error ?? "Import failed.");
+        setError(getImportFailureMessage(job.error, username));
         setIsLoading(false);
         return;
       }
@@ -105,10 +126,15 @@ export function ImportGames() {
       setJobStatus(job);
       await pollJob(job.id);
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Import failed. Please check your username and try again."
-      );
+      // This catch only covers the request that STARTS the import. Waiting for it is handled in pollJob.
+      const status = getErrorStatus(err);
+      if (isNetworkError(err)) {
+        setError("We couldn't start the import because Chesslens can't be reached. Check your internet connection, then click Start import again.");
+      } else if (status === 422) {
+        setError("Enter your Chess.com username to start the import.");
+      } else {
+        setError(getErrorMessage(err, "We couldn't start the import. Please try again."));
+      }
       setIsLoading(false);
     }
   };
