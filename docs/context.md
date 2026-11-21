@@ -525,7 +525,7 @@ Then build `backend/bulk_analyze_parallel.py`, run against local DB, re-run regr
 - ~~Lichess Cloud Eval integration~~ — coverage too low (15.5%) for Chess.com games
 
 **Backlog (no session assigned yet):**
-- Frontend graceful error handling — DONE and browser-validated (2026-11-21, 10 manual cases incl. offline/blocked-API): ErrorBoundary, toasts, retry states, 30s request timeout, backend catch-all 500 handler + failure logging, auth startup no longer signs out on network errors (retry screen instead), Import page has per-failure messages. Still open: email login, Google sign-in and Game Review analysis not re-smoke-tested in browser; login forms still use inline error text.
+- Frontend graceful error handling — DONE and browser-validated (2026-11-21, 10 manual cases incl. offline/blocked-API): ErrorBoundary, toasts, retry states, 30s request timeout, backend catch-all 500 handler + failure logging, auth startup no longer signs out on network errors (retry screen instead), Import page has per-failure messages. Still open: email login, Google sign-in and Game Review analysis not re-smoke-tested in browser; login forms still use inline error text. Deployed to production 2026-11-21 at commit fd680c3 (Fly.io backend v17, Vercel frontend production).
 - Mobile responsiveness
 - User-facing onboarding flow
 - React Native mobile app

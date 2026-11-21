@@ -15,7 +15,7 @@
 > **Free tier capacity:** Suitable for personal use and up to ~20 concurrent users. Scale up by changing the `[[vm]]` block in `fly.toml` — no other changes needed.
 
 - Backend URL: `https://chesslens-api.fly.dev`
-- Frontend URL: `https://chesslens.vercel.app`
+- Frontend URL: `https://chesslens-io.vercel.app`
 
 ---
 
@@ -150,8 +150,8 @@ fly secrets set \
   STOCKFISH_PATH="/usr/games/stockfish"                                 \
   STOCKFISH_DEPTH="12"                                                  \
   STOCKFISH_BULK_DEPTH="5"                                              \
-  FRONTEND_URL="https://chesslens.vercel.app"                           \
-  CORS_ORIGINS="https://chesslens.vercel.app"                           \
+  FRONTEND_URL="https://chesslens-io.vercel.app"                           \
+  CORS_ORIGINS="https://chesslens-io.vercel.app"                           \
   APP_ENV="production"
 ```
 
@@ -168,7 +168,7 @@ VITE_GOOGLE_CLIENT_ID = <same Google client ID>
 
 In [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth 2.0 Client:
 
-- **Authorised JavaScript origins:** Add `https://chesslens.vercel.app`
+- **Authorised JavaScript origins:** Add `https://chesslens-io.vercel.app`
 - **Authorised redirect URIs:** Add `https://chesslens-api.fly.dev/auth/google/callback`
 
 ---
