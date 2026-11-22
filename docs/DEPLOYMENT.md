@@ -1,6 +1,6 @@
 # Chesslens — Production Deployment Guide
 
-> **Status:** Plan drafted. Not yet deployed. MVP target: Fly.io (backend) + Vercel (frontend) + Fly.io Postgres.
+> **Status:** Deployed to production since 2026-05-27. Backend on Fly.io, frontend on Vercel, database on Fly.io Postgres. Backend deploys are manual (`fly deploy` from a clean `main`). Vercel deploys automatically on each merge to `main`.
 
 ---
 
@@ -25,7 +25,9 @@ All Stockfish features ship. The Claude AI layer (Playing Style, Coaching, per-g
 
 ---
 
-## Files to Create
+## Deployment Files
+
+> These files now exist in the repo. The repo copies are the source of truth. The examples below are the original plan and can differ from the live files. For example, `fly.toml` now uses 1 GB of memory and runs migrations with `python3 -m alembic upgrade head`.
 
 ### `backend/Dockerfile`
 
@@ -96,7 +98,7 @@ primary_region = "sin"
 
 ## Alembic Setup (Database Migrations)
 
-Alembic is in `requirements.txt` but not yet initialised. Run once locally:
+Alembic is set up in `backend/migrations/` with a baseline migration. The commands below show how it was first initialised. Do not run them again:
 
 ```bash
 cd backend
